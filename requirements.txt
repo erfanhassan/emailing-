@@ -1,0 +1,13 @@
+streamlit
+openai
+gspread
+requests
+beautifulsoup4
+python-dotenv
+fastapi
+uvicorn
+apscheduler
+dnspython
+duckduckgo-search
+plotly
+pandas
