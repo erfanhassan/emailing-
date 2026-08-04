@@ -525,19 +525,6 @@ if st.sidebar.button("🔄 Force Sync with Sheet", use_container_width=True, typ
 st.sidebar.metric(label="Total Emails Sent 🚀", value=total_sent)
 
 st.sidebar.markdown("---")
-page = st.sidebar.radio("📌 Navigation", ["📊 Dashboard", "⚡ Outreach Jobs", "🌍 Geo-Sourcing", "⚙️ Campaigns", "💬 AI Assistant"])
-
-if page == "📊 Dashboard":
-    render_dashboard()
-    render_tables()
-elif page == "⚡ Outreach Jobs":
-    render_command_center()
-elif page == "🌍 Geo-Sourcing":
-    render_geo_sourcing()
-elif page == "⚙️ Campaigns":
-    render_campaigns()
-elif page == "💬 AI Assistant":
-    render_chat_assistant()
 
 # Quick Actions and Control Settings
 def render_command_center():
@@ -1293,3 +1280,19 @@ def render_tables():
                             except Exception as e:
                                 st.error(f"Error adding follow-up row: {e}")
 
+# ==============================================================================
+# MAIN ROUTING
+# ==============================================================================
+page = st.sidebar.radio("📌 Navigation", ["📊 Dashboard", "⚡ Outreach Jobs", "🌍 Geo-Sourcing", "⚙️ Campaigns", "💬 AI Assistant"])
+
+if page == "📊 Dashboard":
+    render_dashboard()
+    render_tables()
+elif page == "⚡ Outreach Jobs":
+    render_command_center()
+elif page == "🌍 Geo-Sourcing":
+    render_geo_sourcing()
+elif page == "⚙️ Campaigns":
+    render_campaigns()
+elif page == "💬 AI Assistant":
+    render_chat_assistant()
