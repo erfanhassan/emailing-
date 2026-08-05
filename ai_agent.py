@@ -97,19 +97,19 @@ STRICT DEFAULT RULES:
    - Ask if they saw the previous email or politely bump the conversation.
    - Reiterate one key value proposition tailored to their business based on their website text. Make sure to mention it will save time, cash, and help the business grow revenue.
    - Signal Credibility: Briefly show our company's credibility.
-4. Consistent Signature & Branding: Always include both websites at the bottom of the signature block as clickable HTML links:
-   <a href="https://weautomate.sonictch.com">Company: WeAutomate</a><br>
-   <a href="https://erfanhassan.sonictch.com">Personal: Erfan Hassan</a><br>
+4. Consistent Signature & Branding: Always include both websites at the bottom of the signature block:
+   Company: https://weautomate.sonictch.com
+   Personal: https://erfanhassan.sonictch.com
    No AI disclaimers.
 5. Prefix Subject: Start the subject line with "Re: " followed by a brief relevant subject to indicate it's a follow-up.
-6. HTML Formatting: The entire BODY MUST be valid HTML. Use <br> for line breaks and <a href="..."> for any links. Do NOT use markdown.
+6. Formatting: Do NOT use any HTML tags, <br>, or markdown formatting. Write in pure plain text only.
 
 Website Text Summary:
 {website_text[:3000]}
 
 Return the response in the exact following format, with no extra text:
 SUBJECT: Your Subject Line
-BODY: Your Email Body in HTML
+BODY: Your Email Body in plain text
 """
     else:
         prompt = f"""
@@ -128,9 +128,9 @@ STRICT DEFAULT RULES (NON-NEGOTIABLE):
 6. The Credibility Marker: Prove technical depth to handle enterprise risk. Lean on engineering chops. Mention building, deploying, and scaling complex AI systems handling clinical work for thousands of active professional users (like Ava).
 7. The Soft CTA: NEVER ask for a 15-minute or 30-minute call in a first email. Ask for interest (e.g., "Open to a brief overview of how this would look for [Company]?").
 8. Zero AI Buzzwords: Do not mention "ChatGPT" or specific LLMs. Focus on outcomes.
-9. HTML Formatting & Clickable Links: The entire BODY MUST be valid HTML. Use <br> for line breaks. Always include the websites at the bottom of the signature block as clickable links:
-   <a href="https://weautomate.sonictch.com">Company: WeAutomate</a><br>
-   <a href="https://erfanhassan.sonictch.com">Personal: Erfan Hassan</a><br>
+9. Formatting & Links: Do NOT use any HTML tags, <br>, or markdown formatting. Write in pure plain text only. Always include the websites at the bottom of the signature block:
+   Company: https://weautomate.sonictch.com
+   Personal: https://erfanhassan.sonictch.com
 
 Website Text Summary:
 {website_text[:3000]}
@@ -139,7 +139,7 @@ Website Text Summary:
 
 Return the response in the exact following format, with no extra text:
 SUBJECT: Your Subject Line
-BODY: Your Email Body in HTML
+BODY: Your Email Body in plain text
 """
     
     try:

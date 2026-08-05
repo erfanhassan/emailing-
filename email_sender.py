@@ -45,6 +45,8 @@ def send_email(to_email: str, subject: str, body: str, thread_id: str = None) ->
     is_html = "<br" in body_lower or "<p" in body_lower or "<html" in body_lower or "<body" in body_lower or "<a " in body_lower
     
     if not is_html:
+        import re
+        body = re.sub(r'(https?://[^\s<]+)', r'<a href="\1">\1</a>', body)
         body = body.replace("\n", "<br>")
         
     tracking_url = os.environ.get("TRACKING_URL", "").rstrip("/")
