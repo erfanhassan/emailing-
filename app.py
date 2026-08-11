@@ -31,59 +31,75 @@ load_dotenv()
 st.set_page_config(page_title="AI Outreach Dashboard", layout="wide")
 st.title("Human-in-the-Loop AI Cold Outreach")
 
-# Custom CSS for premium styling
+# Custom CSS — mobile-first, responsive, premium styling
 st.markdown("""
 <style>
+    /* ── Google Font ────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* ── Page title ─────────────────────────────── */
     .main-title {
-        font-size: 2.5rem;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
         font-weight: 800;
         color: #1E3A8A;
         margin-bottom: 0.5rem;
     }
     .sub-title {
-        font-size: 1.1rem;
+        font-size: clamp(0.9rem, 2vw, 1.1rem);
         color: #4B5563;
         margin-bottom: 2rem;
     }
+
+    /* ── Metric cards ───────────────────────────── */
     .metric-card {
         background-color: #F8FAFC;
-        padding: 1rem;
+        padding: clamp(0.6rem, 2vw, 1rem);
         border-radius: 12px;
         border: 1px solid #E2E8F0;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         text-align: center;
         margin-bottom: 1rem;
         transition: transform 0.2s, box-shadow 0.2s;
+        min-width: 0;           /* prevent overflow in grid */
     }
     .metric-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08);
     }
     .metric-val {
-        font-size: 2rem;
+        font-size: clamp(1.4rem, 4vw, 2rem);
         font-weight: 800;
         color: #0F172A;
+        line-height: 1.1;
     }
     .metric-lbl {
-        font-size: 0.75rem;
+        font-size: clamp(0.65rem, 1.5vw, 0.75rem);
         color: #64748B;
         text-transform: uppercase;
         font-weight: 600;
         letter-spacing: 0.05em;
         margin-top: 0.25rem;
     }
+
+    /* ── Control card ───────────────────────────── */
     .control-card {
         background-color: #FFFFFF;
-        padding: 1.5rem;
+        padding: clamp(1rem, 3vw, 1.5rem);
         border-radius: 12px;
         border: 1px solid #E2E8F0;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         margin-bottom: 1.5rem;
     }
+
+    /* ── Badges ─────────────────────────────────── */
     .badge {
-        padding: 0.25rem 0.5rem;
+        padding: 0.25rem 0.6rem;
         border-radius: 9999px;
-        font-size: 0.75rem;
+        font-size: clamp(0.65rem, 1.5vw, 0.75rem);
         font-weight: 700;
         display: inline-block;
         margin-bottom: 0.5rem;
@@ -98,31 +114,298 @@ st.markdown("""
         color: #92400E;
         border: 1px solid #FDE68A;
     }
+
+    /* ── Touch-friendly buttons ─────────────────── */
+    .stButton > button {
+        min-height: 44px;
+        font-size: clamp(0.8rem, 2vw, 0.9rem);
+        border-radius: 8px;
+        transition: all 0.15s ease;
+    }
+    .stButton > button:active {
+        transform: scale(0.97);
+    }
+
+    /* ── Inputs and text areas ──────────────────── */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div > div {
+        font-size: clamp(0.85rem, 2vw, 0.95rem);
+        border-radius: 8px;
+    }
+
+    /* ── Tabs — scrollable on mobile ────────────── */
+    .stTabs [data-baseweb="tab-list"] {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+    }
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
+        display: none;
+    }
+    .stTabs [data-baseweb="tab"] {
+        white-space: nowrap;
+        min-height: 44px;
+    }
+
+    /* ── Expanders ──────────────────────────────── */
+    details {
+        border-radius: 10px !important;
+        overflow: hidden;
+    }
+
+    /* ── Sidebar ────────────────────────────────── */
+    [data-testid="stSidebar"] {
+        min-width: 240px;
+    }
+    [data-testid="stSidebar"] .stSelectbox,
+    [data-testid="stSidebar"] .stTextInput {
+        font-size: 0.85rem;
+    }
+
+    /* ── Responsive column stacking ─────────────── */
+    @media (max-width: 640px) {
+        /* Stack columns vertically on phones */
+        [data-testid="column"] {
+            width: 100% !important;
+            min-width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+
+        /* Full-width buttons on mobile */
+        .stButton > button {
+            width: 100%;
+        }
+
+        /* Metric value slightly smaller */
+        .metric-val {
+            font-size: 1.4rem;
+        }
+
+        /* Metric cards in a 2-column auto grid */
+        .metric-card {
+            display: inline-block;
+            width: 47%;
+            margin: 1.5%;
+            vertical-align: top;
+        }
+
+        /* Prevent sidebar overlay eating content */
+        [data-testid="stSidebar"][aria-expanded="true"] {
+            z-index: 999;
+        }
+
+        /* Chat input full width */
+        [data-testid="stChatInput"] {
+            width: 100% !important;
+        }
+    }
+
+    @media (max-width: 768px) {
+        /* Scrollable data tables */
+        [data-testid="stDataFrame"],
+        .stDataFrame {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Tighten padding on main block */
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+    }
+
+    @media (max-width: 480px) {
+        /* Extra-small screens — shrink title */
+        h1 { font-size: 1.4rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        h3 { font-size: 1rem !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def render_campaigns():
-    st.markdown("Create multiple AI campaigns. The AI will randomly select one to test which messaging performs better.")
+
+def get_gspread_client():
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        try:
+            import json
+            from google.oauth2.service_account import Credentials
+            creds_dict = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ])
+            return gspread.authorize(creds)
+        except Exception as e:
+            st.error(f"Failed to load credentials from GOOGLE_CREDENTIALS_JSON: {e}")
+            return None
+
+    creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if not creds_file or not os.path.exists(creds_file):
+        return None
+    try:
+        return gspread.service_account(filename=creds_file)
+    except Exception as e:
+        st.error(f"Failed to connect to Google Sheets: {e}")
+        return None
+
+# --- Google Sheet Connection ---
+gc = get_gspread_client()
+sheet_url_or_id = os.environ.get("GOOGLE_SHEET_URL_OR_ID", "")
+
+st.sidebar.header("🔗 Google Sheet Connection")
+new_sheet_url = st.sidebar.text_input("Google Sheet URL", value=sheet_url_or_id)
+if new_sheet_url != sheet_url_or_id:
+    os.environ["GOOGLE_SHEET_URL_OR_ID"] = new_sheet_url
+    st.sidebar.success("Google Sheet updated for this session! Reloading...")
+    time.sleep(1)
+    st.rerun()
+
+sheet_url_or_id = new_sheet_url
+
+if not gc or not sheet_url_or_id:
+    st.warning("⚠️ Please provide a Google Sheet URL in the sidebar and ensure your Google credentials are valid.")
+    st.stop()
+
+# Load the Google Sheet
+try:
+    if "spreadsheets.google.com" in sheet_url_or_id:
+        sh = gc.open_by_url(sheet_url_or_id)
+    else:
+        sh = gc.open_by_key(sheet_url_or_id)
+except Exception as e:
+    st.error(f"Could not open Google Sheet: {e}")
+    st.stop()
+
+# --- Load Settings from Sheet ---
+def load_settings_from_sheet(sh):
+    try:
+        ws = sh.worksheet("Settings")
+        records = ws.get_all_records()
+        for record in records:
+            key = record.get("Key")
+            val = record.get("Value")
+            if key:
+                os.environ[key] = str(val)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
+        ws.append_row(["Key", "Value"])
+load_settings_from_sheet(sh)
+
+def save_setting_to_sheet(sh, key, value):
+    try:
+        ws = sh.worksheet("Settings")
+    except:
+        ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
+        ws.append_row(["Key", "Value"])
+        
+    try:
+        cell = ws.find(key, in_column=1)
+        ws.update_cell(cell.row, 2, value)
+    except gspread.exceptions.CellNotFound:
+        ws.append_row([key, value])
+    os.environ[key] = str(value)
+
+# --- Render Email Provider Settings ---
+st.sidebar.markdown("---")
+st.sidebar.header("📧 Email Provider Settings")
+
+provider_creds = {
+    "Hostinger": {
+        "email": os.environ.get("HOSTINGER_EMAIL", ""),
+        "password": os.environ.get("HOSTINGER_PASSWORD", "")
+    },
+    "Gmail": {
+        "email": os.environ.get("GMAIL_EMAIL", ""),
+        "password": os.environ.get("GMAIL_PASSWORD", "")
+    },
+    "Zoho Mail": {
+        "email": os.environ.get("ZOHO_EMAIL", ""),
+        "password": os.environ.get("ZOHO_PASSWORD", "")
+    }
+}
+
+current_provider = os.environ.get("SMTP_PROVIDER", "Hostinger")
+new_provider = st.sidebar.selectbox(
+    "SMTP Provider", 
+    ["Hostinger", "Gmail", "Zoho Mail"], 
+    index=["Hostinger", "Gmail", "Zoho Mail"].index(current_provider) if current_provider in ["Hostinger", "Gmail", "Zoho Mail"] else 0
+)
+
+default_email = provider_creds[new_provider]["email"]
+default_password = provider_creds[new_provider]["password"]
+new_email = st.sidebar.text_input("Email Address", value=default_email)
+new_password = st.sidebar.text_input("Password (or App Password)", value=default_password, type="password")
+
+if st.sidebar.button("💾 Save Email Settings"):
+    save_setting_to_sheet(sh, "SMTP_PROVIDER", new_provider)
+    if new_provider == "Hostinger":
+        save_setting_to_sheet(sh, "HOSTINGER_EMAIL", new_email)
+        save_setting_to_sheet(sh, "HOSTINGER_PASSWORD", new_password)
+    elif new_provider == "Gmail":
+        save_setting_to_sheet(sh, "GMAIL_EMAIL", new_email)
+        save_setting_to_sheet(sh, "GMAIL_PASSWORD", new_password)
+    elif new_provider == "Zoho Mail":
+        save_setting_to_sheet(sh, "ZOHO_EMAIL", new_email)
+        save_setting_to_sheet(sh, "ZOHO_PASSWORD", new_password)
+        
+    save_setting_to_sheet(sh, "SMTP_EMAIL", new_email)
+    save_setting_to_sheet(sh, "SMTP_PASSWORD", new_password)
     
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_config.json")
-    
+    st.sidebar.success("Email Settings saved to Google Sheet! Reloading...")
+    time.sleep(1)
+    st.rerun()
+
+# --- Campaigns Logic ---
+def load_campaigns_from_sheet(sh):
     campaigns = {"Default": {
         "sender_name": "", "tone": "Professional and concise", 
         "value_proposition": "Saving time and reducing manual work through AI.", 
         "extra_instructions": "Do not use vague automation terms."
     }}
-    
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r") as f:
-                conf = json.load(f)
-                if isinstance(conf, dict) and any(isinstance(v, dict) for v in conf.values()):
-                    campaigns = conf
-                else:
-                    campaigns["Default"] = conf
-        except:
-            pass
+    try:
+        ws = sh.worksheet("Campaigns")
+        records = ws.get_all_records()
+        if records:
+            loaded_campaigns = {}
+            for row in records:
+                name = str(row.get("Campaign Name", "")).strip()
+                if name:
+                    loaded_campaigns[name] = {
+                        "sender_name": str(row.get("Sender Name", "")),
+                        "tone": str(row.get("Tone", "")),
+                        "value_proposition": str(row.get("Value Proposition", "")),
+                        "extra_instructions": str(row.get("Extra Instructions", ""))
+                    }
+            if loaded_campaigns:
+                return loaded_campaigns
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Campaigns", rows="100", cols="5")
+        ws.append_row(["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"])
+        ws.append_row(["Default", campaigns["Default"]["sender_name"], campaigns["Default"]["tone"], campaigns["Default"]["value_proposition"], campaigns["Default"]["extra_instructions"]])
+    return campaigns
 
+def save_all_campaigns_to_sheet(sh, campaigns_dict):
+    try:
+        ws = sh.worksheet("Campaigns")
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Campaigns", rows="100", cols="5")
+    
+    ws.clear()
+    rows = [["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"]]
+    for name, data in campaigns_dict.items():
+        rows.append([name, data.get("sender_name", ""), data.get("tone", ""), data.get("value_proposition", ""), data.get("extra_instructions", "")])
+    ws.append_rows(rows)
+
+# Load global campaigns variable so it can be passed to draft_email_with_deepseek
+global_campaigns = load_campaigns_from_sheet(sh)
+
+def render_campaigns():
+    st.markdown("Create multiple AI campaigns. The AI will randomly select one to test which messaging performs better.")
+    campaigns = global_campaigns
     camp_tabs = st.tabs(list(campaigns.keys()) + ["+ New Campaign"])
     
     for i, (camp_name, camp_data) in enumerate(campaigns.items()):
@@ -138,49 +421,21 @@ def render_campaigns():
                         "sender_name": new_sender, "tone": new_tone,
                         "value_proposition": new_value, "extra_instructions": new_extra
                     }
-                    with open(config_path, "w") as f:
-                        json.dump(campaigns, f, indent=4)
-                    st.success(f"✅ {camp_name} Campaign saved!")
+                    save_all_campaigns_to_sheet(sh, campaigns)
+                    st.success(f"✅ {camp_name} Campaign saved to Google Sheet!")
+                    time.sleep(1)
+                    st.rerun()
                     
     with camp_tabs[-1]:
         with st.form("new_campaign_form"):
             new_camp_name = st.text_input("New Campaign Name", placeholder="e.g. Aggressive Pitch")
             if st.form_submit_button("➕ Create Campaign"):
                 if new_camp_name and new_camp_name not in campaigns:
-                    campaigns[new_camp_name] = campaigns["Default"].copy()
-                    with open(config_path, "w") as f:
-                        json.dump(campaigns, f, indent=4)
+                    campaigns[new_camp_name] = {"sender_name": "", "tone": "", "value_proposition": "", "extra_instructions": ""}
+                    save_all_campaigns_to_sheet(sh, campaigns)
                     st.success("Campaign created! Reloading...")
+                    time.sleep(1)
                     st.rerun()
-
-def get_gspread_client():
-    creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if not creds_file or not os.path.exists(creds_file):
-        return None
-    try:
-        return gspread.service_account(filename=creds_file)
-    except Exception as e:
-        st.error(f"Failed to connect to Google Sheets: {e}")
-        return None
-
-gc = get_gspread_client()
-sheet_url_or_id = os.environ.get("GOOGLE_SHEET_URL_OR_ID", "")
-
-st.sidebar.header("🔗 Google Sheet Connection")
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-new_sheet_url = st.sidebar.text_input("Google Sheet URL", value=sheet_url_or_id)
-if new_sheet_url != sheet_url_or_id:
-    set_key(env_path, "GOOGLE_SHEET_URL_OR_ID", new_sheet_url)
-    os.environ["GOOGLE_SHEET_URL_OR_ID"] = new_sheet_url
-    st.sidebar.success("Google Sheet updated! Reloading...")
-    time.sleep(1)
-    st.rerun()
-
-sheet_url_or_id = new_sheet_url
-
-if not gc or not sheet_url_or_id:
-    st.warning("⚠️ Please provide a Google Sheet URL in the sidebar and ensure your Google credentials are valid.")
-    st.stop()
 
 @st.cache_data(ttl=10)
 def get_sheet_last_update_time(sheet_url_or_id):
@@ -216,13 +471,19 @@ if "draft_limit" not in st.session_state:
     st.session_state.draft_limit = 5
 if "daily_limit" not in st.session_state:
     st.session_state.daily_limit = 50
-if "send_delay" not in st.session_state:
-    st.session_state.send_delay = 15
+if "delay_value" not in st.session_state:
+    st.session_state.delay_value = int(os.environ.get("DELAY_VALUE", "15"))
+if "delay_unit" not in st.session_state:
+    st.session_state.delay_unit = os.environ.get("DELAY_UNIT", "Seconds")
 
-if "spreadsheets.google.com" in sheet_url_or_id:
-    sh = gc.open_by_url(sheet_url_or_id)
-else:
-    sh = gc.open_by_key(sheet_url_or_id)
+try:
+    if "spreadsheets.google.com" in sheet_url_or_id:
+        sh = gc.open_by_url(sheet_url_or_id)
+    else:
+        sh = gc.open_by_key(sheet_url_or_id)
+except Exception as e:
+    st.error(f"❌ Could not find the Google Sheet. Please check the URL and ensure you have shared it with the service account email. Error: {e}")
+    st.stop()
 
 st.sidebar.markdown("---")
 all_sheets = [ws.title for ws in sh.worksheets()]
@@ -342,7 +603,7 @@ def run_drafting_job(limit):
                 time.sleep(1)
                 continue
                 
-            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text)
+            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text, campaigns_dict=global_campaigns)
             
             if subject and body:
                 target_email = current_email
@@ -413,7 +674,7 @@ def run_followup_job(limit):
                         scraped_text, _ = scrape_website_data(website)
                         if scraped_text:
                             original_body = lead.get(headers[orig_body_idx], "") if orig_body_idx != -1 else ""
-                            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text, is_follow_up=True, original_email_text=original_body)
+                            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text, is_follow_up=True, original_email_text=original_body, campaigns_dict=global_campaigns)
                             if subject and body:
                                 status_cell = rowcol_to_a1(row_idx, status_idx + 1)
                                 subj_cell = rowcol_to_a1(row_idx, subject_idx + 1)
@@ -557,44 +818,52 @@ def render_command_center():
                             st.info("No leads currently qualify for a follow-up.")
             with btn_col3:
                 if st.button("🚀 Send Approved Queue", use_container_width=True, type="primary", help="Send all 'Approved' emails via SMTP"):
-                    with st.spinner("Sending approved emails from queue..."):
-                        sent_count = run_sending_job(st.session_state.daily_limit, st.session_state.send_delay)
-                        if sent_count > 0:
-                            st.success(f"Successfully sent {sent_count} emails.")
-                            clear_cache()
-                            st.rerun()
-                        else:
-                            st.info("No 'Approved' emails in queue to send.")
+                    st.success("The queue is active! Approved emails will be sent automatically by the background worker based on your configured delay.")
                         
         with col_cfg:
             st.markdown("**Outreach Parameters**")
             st.number_input("Max Drafts per Run", min_value=1, max_value=500, key="draft_limit")
             st.number_input("Max Emails to Send", min_value=1, max_value=500, key="daily_limit")
-            st.slider("Delay between emails (sec)", min_value=1, max_value=60, key="send_delay")
+            
+            def update_delay_settings():
+                unit_multiplier = {"Seconds": 1, "Minutes": 60, "Hours": 3600, "Days": 86400}
+                total_delay_sec = st.session_state.delay_value * unit_multiplier[st.session_state.delay_unit]
+                try:
+                    save_setting_to_sheet(sh, "SEND_DELAY_SEC", total_delay_sec)
+                    save_setting_to_sheet(sh, "DELAY_VALUE", st.session_state.delay_value)
+                    save_setting_to_sheet(sh, "DELAY_UNIT", st.session_state.delay_unit)
+                except:
+                    pass
 
-    from urllib.parse import urlparse
+            delay_col1, delay_col2 = st.columns(2)
+            with delay_col1:
+                st.number_input("Delay Value", min_value=1, key="delay_value", on_change=update_delay_settings)
+            with delay_col2:
+                st.selectbox("Delay Unit", options=["Seconds", "Minutes", "Hours", "Days"], key="delay_unit", on_change=update_delay_settings)
 
-    def normalize_domain(url: str) -> str:
-        if not url:
-            return ""
-        if not url.startswith("http"):
-            url = "http://" + url
-        try:
-            parsed = urlparse(url)
-            netloc = parsed.netloc.lower()
-            if netloc.startswith("www."):
-                netloc = netloc[4:]
-            return netloc
-        except:
-            return url.lower()
+from urllib.parse import urlparse
 
-    # Initialize state variables for incremental radius grid search
-    if "geo_query" not in st.session_state:
-        st.session_state.geo_query = ""
-    if "geo_sub_locations_pool" not in st.session_state:
-        st.session_state.geo_sub_locations_pool = []
-    if "geo_sub_locations_searched" not in st.session_state:
-        st.session_state.geo_sub_locations_searched = []
+def normalize_domain(url: str) -> str:
+    if not url:
+        return ""
+    if not url.startswith("http"):
+        url = "http://" + url
+    try:
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        return netloc
+    except:
+        return url.lower()
+
+# Initialize state variables for incremental radius grid search
+if "geo_query" not in st.session_state:
+    st.session_state.geo_query = ""
+if "geo_sub_locations_pool" not in st.session_state:
+    st.session_state.geo_sub_locations_pool = []
+if "geo_sub_locations_searched" not in st.session_state:
+    st.session_state.geo_sub_locations_searched = []
 
 def render_geo_sourcing():
         st.markdown("Search for local businesses across neighborhoods and automatically enrich/add them to your outreach list.")
@@ -614,47 +883,17 @@ def render_geo_sourcing():
             if not search_location or not search_industry:
                 st.error("Please provide both a location and an industry.")
             else:
-                # Set or check query state
                 if st.session_state.geo_query != current_search:
                     st.session_state.geo_query = current_search
                     st.session_state.geo_sub_locations_pool = []
                     st.session_state.geo_sub_locations_searched = []
                 
-                pool = st.session_state.geo_sub_locations_pool
-                searched = st.session_state.geo_sub_locations_searched
-            
-                # Step 1: Sub-Locations pool generation
-                if not pool or len(set(pool) - set(searched)) < 3:
-                    with st.spinner("Dynamically generating commercial sub-locations for radius grid search..."):
-                        new_locs = geo_search.get_sub_locations(search_location, exclude_list=searched)
-                        st.session_state.geo_sub_locations_pool = list(set(pool + new_locs))
-                        pool = st.session_state.geo_sub_locations_pool
-                    
-                # Select up to 4 new neighborhoods to search
-                remaining = [item for item in pool if item not in searched]
-                sub_locs_to_search = remaining[:4]
-                if not sub_locs_to_search:
-                    sub_locs_to_search = [search_location]
+                added_count = 0
+                skipped_count = 0
                 
-                # Stage 1: Discovery (Raw business yield)
                 status_placeholder = st.empty()
                 progress_bar = st.progress(0.0)
-            
-                status_placeholder.info(f"🔎 Starting Stage 1 (Discovery) across: {', '.join(sub_locs_to_search)}...")
-                time.sleep(1)
-            
-                raw_results = []
-                for idx, sub_loc in enumerate(sub_locs_to_search):
-                    status_placeholder.markdown(f"🔎 **Stage 1 (Discovery)**: Searching `{search_industry}` in `{sub_loc}` ({idx+1}/{len(sub_locs_to_search)})...")
-                    progress_bar.progress((idx) / len(sub_locs_to_search))
                 
-                    batch = geo_search.discover_businesses(sub_loc, search_industry)
-                    raw_results.extend(batch)
-                    time.sleep(0.5)
-                
-                progress_bar.progress(1.0)
-            
-                # Retrieve existing website domains from sheet for deduplication
                 master_sheet_name = "Discovered Leads"
                 clean_headers = ["Company", "Location", "Industry", "Website", "Phone Number", "Email Address", "Status", "Draft Subject", "Draft Body", "Last Contacted Date"]
                 try:
@@ -664,72 +903,81 @@ def render_geo_sourcing():
                     new_ws = sh.worksheet(master_sheet_name)
                 
                 try:
-                    # Column 4 is Website
                     existing_websites = new_ws.col_values(4)
                     existing_domains = {normalize_domain(url) for url in existing_websites if url}
                 except Exception:
                     existing_domains = set()
                 
-                # Deduplicate the batch
-                unique_discovered = []
                 seen_domains_this_run = set()
-                for b in raw_results:
-                    website = b.get("website", "")
-                    if not website:
-                        continue
-                    domain = normalize_domain(website)
-                    if domain in existing_domains or domain in seen_domains_this_run:
-                        continue
-                    unique_discovered.append(b)
-                    seen_domains_this_run.add(domain)
                 
-                # Stage 2: Email Scraping & Enrichment
-                total_to_process = len(unique_discovered)
-                if total_to_process == 0:
-                    status_placeholder.warning("No new unique businesses discovered in this batch. Try searching again for adjacent areas.")
-                    st.session_state.geo_sub_locations_searched = list(set(searched + sub_locs_to_search))
-                else:
-                    status_placeholder.success(f"Discovered **{total_to_process}** unique businesses. Starting Stage 2 (Email Scraping)...")
-                    progress_bar.progress(0.0)
-                
-                    added_count = 0
-                    skipped_count = 0
-                
+                while added_count < 50:
+                    pool = st.session_state.geo_sub_locations_pool
+                    searched = st.session_state.geo_sub_locations_searched
+                    
+                    if not pool or len(set(pool) - set(searched)) < 1:
+                        with st.spinner("Dynamically generating commercial sub-locations for radius grid search..."):
+                            new_locs = geo_search.get_sub_locations(search_location, exclude_list=searched)
+                            if not new_locs:
+                                status_placeholder.warning("Exhausted all locations. Stopping.")
+                                break
+                            st.session_state.geo_sub_locations_pool = list(set(pool + new_locs))
+                            pool = st.session_state.geo_sub_locations_pool
+                            
+                    remaining = [item for item in pool if item not in searched]
+                    sub_loc = remaining[0] if remaining else search_location
+                    
+                    status_placeholder.info(f"🔎 Searching `{search_industry}` in `{sub_loc}` (Target: 50, Current: {added_count})...")
+                    
+                    batch = geo_search.discover_businesses(sub_loc, search_industry)
+                    st.session_state.geo_sub_locations_searched.append(sub_loc)
+                    
+                    unique_discovered = []
+                    for b in batch:
+                        website = b.get("website", "")
+                        if website:
+                            domain = normalize_domain(website)
+                            if domain in existing_domains or domain in seen_domains_this_run:
+                                continue
+                            seen_domains_this_run.add(domain)
+                        unique_discovered.append(b)
+                        
                     for idx, b in enumerate(unique_discovered):
-                        status_placeholder.markdown(f"⚡ **Stage 2 (Scraping)**: Scraping emails ({idx+1}/{total_to_process}) for **{b['name']}**...")
-                        progress_bar.progress((idx) / total_to_process)
-                    
+                        if added_count >= 50:
+                            break
+                            
+                        status_placeholder.markdown(f"⚡ **Scraping** ({added_count}/50 found) for **{b['name']}**...")
                         website = b.get("website")
-                        scraped_text, found_emails = scrape_website_data(website)
-                    
-                        if found_emails:
-                            # Append the lead to sheet
+                        found_emails = []
+                        if website:
+                            scraped_text, found_emails = scrape_website_data(website)
+                            
+                        phone = b.get("phone", "")
+                        
+                        if found_emails or phone:
                             new_row = [""] * len(clean_headers)
                             new_row[0] = b.get("name", "")
-                            new_row[1] = b.get("address") or search_location
+                            new_row[1] = b.get("address") or sub_loc
                             new_row[2] = search_industry
                             new_row[3] = website
-                            new_row[4] = b.get("phone", "")
-                            new_row[5] = found_emails[0]
+                            new_row[4] = phone
+                            new_row[5] = found_emails[0] if found_emails else ""
                             new_row[6] = "New"
                         
                             new_ws.append_row(new_row)
                             added_count += 1
+                            progress_bar.progress(min(added_count / 50.0, 1.0))
                             time.sleep(0.5)
                         else:
                             skipped_count += 1
-                        
-                    progress_bar.progress(1.0)
-                    st.session_state.geo_sub_locations_searched = list(set(searched + sub_locs_to_search))
+
+                if added_count > 0:
+                    status_placeholder.success(f"✅ Success! Discovered and added **{added_count}** new enriched leads to '{master_sheet_name}' (skipped {skipped_count} without contact info).")
+                else:
+                    status_placeholder.warning(f"Could not find valid leads with contact info. Try a different category.")
                 
-                    if added_count > 0:
-                        status_placeholder.success(f"✅ Success! Discovered and added **{added_count}** new enriched leads to '{master_sheet_name}' (skipped {skipped_count} leads without emails).")
-                    else:
-                        status_placeholder.warning(f"Processed {total_to_process} businesses, but found no emails. Try a different category or search location.")
-                    
-                    clear_cache()
-                    time.sleep(3)
-                    st.rerun()
+                clear_cache()
+                time.sleep(3)
+                st.rerun()
 
 def render_chat_assistant():
         if "messages" not in st.session_state:
@@ -768,18 +1016,8 @@ def render_chat_assistant():
                         st.session_state.messages.append({"role": "assistant", "content": response})
 
                 elif action == "send":
-                    st.markdown(f"Executing sending job for up to {limit} emails...")
-                    sent_count = run_sending_job(limit, send_delay)
-                    if sent_count > 0:
-                        response = f"Successfully sent {sent_count} emails."
-                        st.success(response)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                        clear_cache()
-                        st.rerun()
-                    else:
-                        response = "No 'Approved' emails in queue to send."
-                        st.info(response)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.markdown(f"Emails have been queued. The background worker will send them based on your configured delay.")
+                    st.session_state.messages.append({"role": "assistant", "content": "Emails have been queued for the background worker."})
 
                 elif action == "interactive_draft":
                     company = intent.get("company", "")
@@ -795,7 +1033,7 @@ def render_chat_assistant():
                     
                         scraped_text, found_emails = scrape_website_data(website)
                         if scraped_text:
-                            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text)
+                            subject, body, campaign_used = draft_email_with_deepseek(company, scraped_text, campaigns_dict=global_campaigns)
                             if subject and body:
                                 if found_emails:
                                     best_email = found_emails[0]
@@ -861,7 +1099,7 @@ def render_chat_assistant():
                         status = "New"
                     
                         if scraped_text:
-                            subject, body, _ = draft_email_with_deepseek(company, scraped_text)
+                            subject, body, _ = draft_email_with_deepseek(company, scraped_text, campaigns_dict=global_campaigns)
                             if subject and body:
                                 if found_emails:
                                     best_email = found_emails[0]
@@ -1011,8 +1249,8 @@ def render_chat_assistant():
                 with col3:
                     if st.button("❌ Discard", use_container_width=True):
                         st.session_state.pending_interactive_draft = None
-                    st.session_state.messages.append({"role": "assistant", "content": f"❌ Discarded draft for {draft['company']}."})
-                st.rerun()
+                        st.session_state.messages.append({"role": "assistant", "content": f"❌ Discarded draft for {draft['company']}."})
+                        st.rerun()
 def render_tables():
     
     st.divider()
@@ -1021,8 +1259,6 @@ def render_tables():
 
     with tab_pending:
         pending_leads = [lead for lead in leads if lead[headers[status_idx]].strip().lower() in ["pending review", "follow-up pending review"]]
-        if st.session_state.get("draft_limit"):
-            pending_leads = pending_leads[:st.session_state.draft_limit]
 
         if not pending_leads:
             new_leads_count = sum(1 for lead in leads if not lead[headers[status_idx]] or lead[headers[status_idx]].strip().lower() == "new")
@@ -1180,7 +1416,9 @@ def render_tables():
                                         if last_contacted_idx != -1:
                                             update_data.append({'range': rowcol_to_a1(row_idx, last_contacted_idx + 1), 'values': [[datetime.now().strftime("%Y-%m-%d")]]})
                                         sent_count += 1
-                                        time.sleep(st.session_state.send_delay)
+                                        unit_multiplier = {"Seconds": 1, "Minutes": 60, "Hours": 3600, "Days": 86400}
+                                        total_delay_sec = st.session_state.delay_value * unit_multiplier[st.session_state.delay_unit]
+                                        time.sleep(total_delay_sec)
                                     else:
                                         st.error(f"Failed to send email to {to_email}")
                     
@@ -1258,7 +1496,7 @@ def render_tables():
                             new_body = ""
                     
                             if scraped_text:
-                                followup_subj, followup_body, _ = draft_email_with_deepseek(company, scraped_text, is_follow_up=True)
+                                followup_subj, followup_body, _ = draft_email_with_deepseek(company, scraped_text, is_follow_up=True, campaigns_dict=global_campaigns)
                                 if followup_subj and followup_body:
                                     new_subject = followup_subj
                                     new_body = followup_body
@@ -1280,10 +1518,105 @@ def render_tables():
                             except Exception as e:
                                 st.error(f"Error adding follow-up row: {e}")
 
+def render_quick_send():
+    st.markdown("### ✉️ Custom Email / Quick Send")
+    st.write("Found an email online? Send a quick email or add them to your outreach list.")
+    
+    with st.container(border=True):
+        c_email = st.text_input("Email Address *")
+        c_company = st.text_input("Company Name")
+        c_website = st.text_input("Website (Optional - used for AI drafting)")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🤖 Generate AI Draft", use_container_width=True):
+                if not c_email:
+                    st.error("Email is required.")
+                elif not c_website:
+                    st.error("Website is required to generate an AI draft.")
+                else:
+                    with st.spinner("Scraping and drafting..."):
+                        scraped_text, _ = scrape_website_data(c_website)
+                        if scraped_text:
+                            subj, body, _ = draft_email_with_deepseek(c_company or "your company", scraped_text, campaigns_dict=global_campaigns)
+                            if subj and body:
+                                st.session_state.quick_subj = subj
+                                st.session_state.quick_body = body
+                                st.rerun()
+                            else:
+                                st.error("Failed to generate draft.")
+                        else:
+                            st.error("Failed to scrape website.")
+        with col2:
+            if st.button("➕ Add as 'New' Lead (No Draft)", use_container_width=True):
+                if not c_email:
+                    st.error("Email is required.")
+                else:
+                    new_row = [""] * len(headers)
+                    if email_idx != -1: new_row[email_idx] = c_email
+                    if company_idx != -1: new_row[company_idx] = c_company
+                    if website_idx != -1: new_row[website_idx] = c_website
+                    if status_idx != -1: new_row[status_idx] = "New"
+                    worksheet.append_row(new_row)
+                    st.success("Added to sheet!")
+                    clear_cache()
+                    
+        st.markdown("---")
+        st.markdown("#### Draft Editor")
+        q_subj = st.text_input("Subject", value=st.session_state.get("quick_subj", ""))
+        q_body = st.text_area("Email Body", value=st.session_state.get("quick_body", ""), height=200)
+        
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            if st.button("🚀 Send Email Now", use_container_width=True, type="primary"):
+                if not c_email or not q_subj or not q_body:
+                    st.error("Email, Subject, and Body are required to send.")
+                else:
+                    with st.spinner("Sending..."):
+                        success, msg_id = send_email(c_email, q_subj, q_body)
+                        if success:
+                            new_row = [""] * len(headers)
+                            if email_idx != -1: new_row[email_idx] = c_email
+                            if company_idx != -1: new_row[company_idx] = c_company
+                            if website_idx != -1: new_row[website_idx] = c_website
+                            if subject_idx != -1: new_row[subject_idx] = q_subj
+                            if body_idx != -1: new_row[body_idx] = q_body
+                            if status_idx != -1: new_row[status_idx] = "Sent"
+                            if thread_idx != -1 and msg_id: new_row[thread_idx] = msg_id
+                            if last_contacted_idx != -1: new_row[last_contacted_idx] = datetime.now().strftime("%Y-%m-%d")
+                            worksheet.append_row(new_row)
+                            st.success("Email sent and recorded!")
+                            st.session_state.quick_subj = ""
+                            st.session_state.quick_body = ""
+                            clear_cache()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Failed to send email.")
+        with col_s2:
+            if st.button("💾 Save to 'Pending Review'", use_container_width=True):
+                if not c_email or not q_subj or not q_body:
+                    st.error("Email, Subject, and Body are required to save a draft.")
+                else:
+                    new_row = [""] * len(headers)
+                    if email_idx != -1: new_row[email_idx] = c_email
+                    if company_idx != -1: new_row[company_idx] = c_company
+                    if website_idx != -1: new_row[website_idx] = c_website
+                    if subject_idx != -1: new_row[subject_idx] = q_subj
+                    if body_idx != -1: new_row[body_idx] = q_body
+                    if status_idx != -1: new_row[status_idx] = "Pending Review"
+                    worksheet.append_row(new_row)
+                    st.success("Draft saved to Pending Review!")
+                    st.session_state.quick_subj = ""
+                    st.session_state.quick_body = ""
+                    clear_cache()
+                    time.sleep(1)
+                    st.rerun()
+
 # ==============================================================================
 # MAIN ROUTING
 # ==============================================================================
-page = st.sidebar.radio("📌 Navigation", ["📊 Dashboard", "⚡ Outreach Jobs", "🌍 Geo-Sourcing", "⚙️ Campaigns", "💬 AI Assistant"])
+page = st.sidebar.radio("📌 Navigation", ["📊 Dashboard", "⚡ Outreach Jobs", "🌍 Geo-Sourcing", "⚙️ Campaigns", "💬 AI Assistant", "✉️ Quick Send"])
 
 if page == "📊 Dashboard":
     render_dashboard()
@@ -1296,3 +1629,5 @@ elif page == "⚙️ Campaigns":
     render_campaigns()
 elif page == "💬 AI Assistant":
     render_chat_assistant()
+elif page == "✉️ Quick Send":
+    render_quick_send()

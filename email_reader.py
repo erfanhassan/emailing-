@@ -9,21 +9,38 @@ import time
 logger = logging.getLogger(__name__)
 
 def connect_imap() -> imaplib.IMAP4_SSL:
-    """Connects to Hostinger IMAP."""
-    sender_email = os.environ.get("HOSTINGER_EMAIL")
-    sender_password = os.environ.get("HOSTINGER_PASSWORD")
-    
+    """Connects to the IMAP server of the currently configured SMTP provider."""
+    provider = os.environ.get("SMTP_PROVIDER", "Hostinger")
+
+    if provider == "Gmail":
+        imap_host = "imap.gmail.com"
+        email_key = "GMAIL_EMAIL"
+        pass_key = "GMAIL_PASSWORD"
+    elif provider == "Zoho Mail":
+        imap_host = "imap.zoho.com"
+        email_key = "ZOHO_EMAIL"
+        pass_key = "ZOHO_PASSWORD"
+    else:  # Hostinger default
+        imap_host = "imap.hostinger.com"
+        email_key = "HOSTINGER_EMAIL"
+        pass_key = "HOSTINGER_PASSWORD"
+
+    sender_email = os.environ.get("SMTP_EMAIL") or os.environ.get(email_key)
+    sender_password = os.environ.get("SMTP_PASSWORD") or os.environ.get(pass_key)
+
     if not sender_email or not sender_password:
-        logger.error("Hostinger credentials not found in env for IMAP.")
+        logger.error(f"Credentials not found for provider '{provider}' in env.")
         return None
-        
+
     try:
-        imap = imaplib.IMAP4_SSL("imap.hostinger.com", 993)
+        imap = imaplib.IMAP4_SSL(imap_host, 993)
         imap.login(sender_email, sender_password)
+        logger.info(f"IMAP connected to {imap_host} as {sender_email}")
         return imap
     except Exception as e:
-        logger.error(f"Failed to connect to IMAP: {e}")
+        logger.error(f"Failed to connect to IMAP ({imap_host}): {e}")
         return None
+
 
 def check_for_replies(gc: gspread.Client, sheet_url_or_id: str, max_emails: int = 50):
     """

@@ -1,6 +1,8 @@
 # Environments
 venv/
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -9,3 +11,9 @@ __pycache__/
 
 # OS generated files
 .DS_Store
+
+# 🔐 CREDENTIALS — NEVER COMMIT THESE
+google_service_account.json
+*.json
+secret*.txt
+credentials*/

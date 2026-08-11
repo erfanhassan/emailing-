@@ -5,9 +5,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 import random
-from duckduckgo_search import DDGS
+import warnings
 
-def draft_email_with_deepseek(company_name: str, website_text: str, is_follow_up: bool = False, original_email_text: str = "", campaign_name: str = None) -> tuple[str, str, str]:
+try:
+    from ddgs import DDGS  # new package name
+except ImportError:
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
+        from duckduckgo_search import DDGS  # fallback to installed package
+
+
+def draft_email_with_deepseek(company_name: str, website_text: str, is_follow_up: bool = False, original_email_text: str = "", campaign_name: str = None, campaigns_dict: dict = None) -> tuple[str, str, str]:
     """
     Uses DeepSeek V4 Pro to draft a personalized cold email pitching AI automation services.
     Returns a tuple containing: (subject, body, campaign_used).
@@ -33,51 +41,45 @@ def draft_email_with_deepseek(company_name: str, website_text: str, is_follow_up
         logger.warning(f"DuckDuckGo search failed for {company_name}: {e}")
 
     # 2. Load custom instructions from config file & handle A/B Campaigns
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_config.json")
     custom_instructions = ""
     used_campaign = campaign_name or "Default"
     
-    if os.path.exists(config_path):
-        try:
-            import json
-            with open(config_path, "r") as f:
-                config_data = json.load(f)
-                
-                # Check if it's the multi-campaign format (dict of dicts)
-                if isinstance(config_data, dict) and any(isinstance(v, dict) for v in config_data.values()):
-                    if campaign_name and campaign_name in config_data:
-                        config = config_data[campaign_name]
-                        used_campaign = campaign_name
-                    else:
-                        # Randomly pick a campaign for A/B testing
-                        used_campaign = random.choice(list(config_data.keys()))
-                        config = config_data[used_campaign]
-                else:
-                    config = config_data # Old format
-                    
-                sender_name = config.get("sender_name", "").strip()
-                tone = config.get("tone", "").strip()
-                value_prop = config.get("value_proposition", "").strip()
-                extra = config.get("extra_instructions", "").strip()
-                
-                custom_instructions_parts = []
-                if sender_name:
-                    custom_instructions_parts.append(f"- Sign off the email as: Regards, {sender_name}")
-                if tone:
-                    custom_instructions_parts.append(f"- Tone and Style: {tone}")
-                if value_prop:
-                    custom_instructions_parts.append(f"- Core Value Proposition to focus on: {value_prop}")
-                if extra:
-                    custom_instructions_parts.append(f"- Additional Rules: {extra}")
-                
-                if custom_instructions_parts:
-                    custom_instructions = (
-                        "CRITICAL USER INSTRUCTIONS (THESE OVERRIDE ALL OTHER RULES):\n" 
-                        + "\n".join(custom_instructions_parts) 
-                        + "\n\n"
-                    )
-        except Exception as e:
-            logger.error(f"Failed to load agent_config.json: {e}")
+    if campaigns_dict:
+        config_data = campaigns_dict
+        
+        # Check if it's the multi-campaign format (dict of dicts)
+        if isinstance(config_data, dict) and any(isinstance(v, dict) for v in config_data.values()):
+            if campaign_name and campaign_name in config_data:
+                config = config_data[campaign_name]
+                used_campaign = campaign_name
+            else:
+                # Randomly pick a campaign for A/B testing
+                used_campaign = random.choice(list(config_data.keys()))
+                config = config_data[used_campaign]
+        else:
+            config = config_data # Old format
+            
+        sender_name = config.get("sender_name", "").strip()
+        tone = config.get("tone", "").strip()
+        value_prop = config.get("value_proposition", "").strip()
+        extra = config.get("extra_instructions", "").strip()
+        
+        custom_instructions_parts = []
+        if sender_name:
+            custom_instructions_parts.append(f"- Sign off the email as: Regards, {sender_name}")
+        if tone:
+            custom_instructions_parts.append(f"- Tone and Style: {tone}")
+        if value_prop:
+            custom_instructions_parts.append(f"- Core Value Proposition to focus on: {value_prop}")
+        if extra:
+            custom_instructions_parts.append(f"- Additional Rules: {extra}")
+        
+        if custom_instructions_parts:
+            custom_instructions = (
+                "CRITICAL USER INSTRUCTIONS (THESE OVERRIDE ALL OTHER RULES):\n" 
+                + "\n".join(custom_instructions_parts) 
+                + "\n\n"
+            )
 
     if is_follow_up:
         original_context = f"\nHere is the previous email you sent them for context:\n{original_email_text}\n" if original_email_text else ""

@@ -142,11 +142,7 @@ def discover_businesses(location: str, industry: str) -> list[dict]:
                 phone = place.get("nationalPhoneNumber", "")
                 address = place.get("formattedAddress", "")
                 
-                # Filter out social media domains masquerading as official websites
-                social_domains = ["youtube.com", "facebook.com", "instagram.com", "twitter.com", "linkedin.com", "tiktok.com"]
-                is_social = any(domain in website.lower() for domain in social_domains) if website else True
-                
-                if name and website and not is_social:
+                if name and (website or phone):
                     results.append({
                         "name": name,
                         "website": website,

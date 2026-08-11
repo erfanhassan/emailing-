@@ -120,8 +120,37 @@ def job_drip_send():
         else:
             sh = gc.open_by_key(sheet_url_or_id)
             
-        # Send max 2 emails per run to drip slowly
-        max_to_send = 2
+        def get_setting(sh, key, default):
+            try:
+                ws = sh.worksheet("Settings")
+                cell = ws.find(key, in_column=1)
+                return ws.cell(cell.row, 2).value
+            except:
+                return default
+                
+        def set_setting(sh, key, value):
+            try:
+                ws = sh.worksheet("Settings")
+                cell = ws.find(key, in_column=1)
+                ws.update_cell(cell.row, 2, str(value))
+            except gspread.exceptions.CellNotFound:
+                ws.append_row([key, str(value)])
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
+                ws.append_row(["Key", "Value"])
+                ws.append_row([key, str(value)])
+                
+        # Determine if it's time to send based on delay
+        send_delay_sec = int(get_setting(sh, "SEND_DELAY_SEC", 15))
+        last_sent_timestamp = float(get_setting(sh, "LAST_SENT_TIMESTAMP", 0))
+        current_time = time.time()
+        
+        if current_time - last_sent_timestamp < send_delay_sec:
+            logger.info(f"Delay period hasn't passed yet. Skipping this cycle. (Waited {int(current_time - last_sent_timestamp)}s / {send_delay_sec}s)")
+            return
+
+        # Send max 1 email per run to strictly respect delay
+        max_to_send = 1
         sent_count = 0
         
         from datetime import datetime
@@ -190,7 +219,7 @@ def job_drip_send():
                                 ws.update_acell(rowcol_to_a1(row_idx, last_contacted_idx + 1), datetime.now().strftime("%Y-%m-%d"))
                             
                             sent_count += 1
-                            time.sleep(2)
+                            set_setting(sh, "LAST_SENT_TIMESTAMP", time.time())
                             
     except Exception as e:
         logger.error(f"Error in drip send job: {e}")
@@ -199,8 +228,8 @@ def job_drip_send():
 scheduler = BackgroundScheduler()
 # Check replies every hour
 scheduler.add_job(job_check_replies, 'interval', minutes=60)
-# Drip send 2 emails every 15 minutes
-scheduler.add_job(job_drip_send, 'interval', minutes=15)
+# Drip send process queue (checks every 1 minute if it's time to send)
+scheduler.add_job(job_drip_send, 'interval', minutes=1)
 
 @app.on_event("startup")
 def startup_event():

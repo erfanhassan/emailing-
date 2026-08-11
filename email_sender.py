@@ -8,25 +8,39 @@ import email.utils
 
 logger = logging.getLogger(__name__)
 
-def send_email(to_email: str, subject: str, body: str, thread_id: str = None) -> tuple[bool, str]:
+def send_email(to_email: str, subject: str, body: str, thread_id: str = None, provider: str = None, sender_email: str = None, sender_password: str = None) -> tuple[bool, str]:
     """
-    Sends an email using Hostinger SMTP.
+    Sends an email using the configured SMTP provider.
     Returns (True, message_id) if successful, (False, "") otherwise.
     """
     if not to_email or not to_email.strip():
         logger.error("Recipient email is empty.")
         return False, ""
 
-    smtp_server = "smtp.hostinger.com"
-    smtp_port = 465
-    
-    sender_email = os.environ.get("HOSTINGER_EMAIL")
-    sender_password = os.environ.get("HOSTINGER_PASSWORD")
-    
+    provider = provider or os.environ.get("SMTP_PROVIDER", "Hostinger")
+    sender_email = sender_email or os.environ.get("SMTP_EMAIL", os.environ.get("HOSTINGER_EMAIL"))
+    sender_password = sender_password or os.environ.get("SMTP_PASSWORD", os.environ.get("HOSTINGER_PASSWORD"))
+
     if not sender_email or not sender_password:
-        logger.error("Hostinger email credentials not found in environment.")
+        logger.error("Email credentials not found.")
         return False, ""
         
+    if provider == "Gmail":
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 465
+        imap_server = "imap.gmail.com"
+        imap_folder = '"[Gmail]/Sent Mail"'
+    elif provider == "Zoho Mail":
+        smtp_server = "smtp.zoho.com"
+        smtp_port = 465
+        imap_server = "imap.zoho.com"
+        imap_folder = "Sent"
+    else:
+        smtp_server = "smtp.hostinger.com"
+        smtp_port = 465
+        imap_server = "imap.hostinger.com"
+        imap_folder = "INBOX.Sent"
+
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = to_email
@@ -79,15 +93,13 @@ def send_email(to_email: str, subject: str, body: str, thread_id: str = None) ->
             server.login(sender_email, sender_password)
             server.send_message(msg)
             
-        # Append to Sent folder via IMAP so it shows up in Hostinger Webmail
+        # Append to Sent folder via IMAP
         try:
             import imaplib
             import time
-            imap_server = "imap.hostinger.com"
             with imaplib.IMAP4_SSL(imap_server, 993) as imap:
                 imap.login(sender_email, sender_password)
-                # The sent folder is typically "Sent" for Hostinger
-                imap.append('INBOX.Sent', None, imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+                imap.append(imap_folder, None, imaplib.Time2Internaldate(time.time()), msg.as_bytes())
         except Exception as imap_e:
             logger.warning(f"Failed to save email to Sent folder (IMAP): {imap_e}")
             

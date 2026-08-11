@@ -2,6 +2,7 @@ import dns.resolver
 import smtplib
 import socket
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,12 @@ def verify_email(email: str) -> bool:
         return False
 
     # 2. SMTP Handshake (optional, best effort)
+    # Check if running in Google Cloud or Cloud Run (which blocks Port 25 outbound)
+    is_gcp = os.environ.get("K_SERVICE") or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+    if is_gcp:
+        logger.info(f"Running on GCP. Skipping Port 25 SMTP handshake for {domain} due to cloud networking restrictions.")
+        return True
+
     try:
         # Some servers might block connections if not from a reputable IP.
         # We'll use a short timeout.
