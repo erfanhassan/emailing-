@@ -1,5 +1,6 @@
 #!/bin/bash
 # keep_alive_git_sync.sh
+# Test sync hook - 24/7 keep-alive check
 # Keeps the AI Outreach Dashboard running 24/7 in Docker and auto-pulls updates from GitHub every 60 seconds.
 
 # Navigate to the repository directory
