@@ -1,0 +1,42 @@
+name: Auto Deploy to Google Cloud VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            cd emailing- || cd emailing
+            git pull origin main
+            
+            # Restart the services.
+            # We check if Docker is being used first, otherwise fall back to restarting systemd/pkill.
+            if [ -f "Dockerfile" ] && docker ps | grep -q "emailing"; then
+              echo "Rebuilding and restarting Docker container..."
+              docker build -t emailing .
+              docker stop emailing || true
+              docker rm emailing || true
+              docker run -d --name emailing -p 8501:8501 -p 8000:8000 emailing
+            elif systemctl is-active --quiet emailing; then
+              echo "Restarting emailing systemd service..."
+              sudo systemctl restart emailing
+            else
+              echo "Restarting processes manually..."
+              pkill -f "streamlit run app.py" || true
+              pkill -f "uvicorn background_worker" || true
+              source .venv/bin/activate || true
+              nohup bash startup.sh > app.log 2>&1 &
+              echo "App restarted in background."
+            fi
