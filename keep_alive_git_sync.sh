@@ -5,13 +5,18 @@
 # Navigate to the repository directory
 cd "$(dirname "$0")"
 
+STARTUP_CMD="./startup.sh"
+if [ -d ".venv" ]; then
+  STARTUP_CMD="./startup_local.sh"
+fi
+
 check_port() {
   local port=$1
   timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null
   return $?
 }
 
-echo "Starting 24/7 Git Sync & Keep-Alive Daemon..."
+echo "Starting 24/7 Git Sync & Keep-Alive Daemon using $STARTUP_CMD..."
 echo "Checking for updates and service status every 60 seconds."
 
 while true; do
@@ -29,8 +34,8 @@ while true; do
     pkill -f "uvicorn background_worker" || true
     sleep 3
     
-    # Restart using startup.sh
-    nohup bash startup.sh > app.log 2>&1 &
+    # Restart using detected command
+    nohup $STARTUP_CMD > app.log 2>&1 &
     echo "$(date): Services restarted successfully."
   else
     # 2. Check if services are running (Streamlit: 8501, FastAPI: 8000)
@@ -42,7 +47,7 @@ while true; do
       pkill -f "streamlit run app.py" || true
       pkill -f "uvicorn background_worker" || true
       sleep 3
-      nohup bash startup.sh > app.log 2>&1 &
+      nohup $STARTUP_CMD > app.log 2>&1 &
       echo "$(date): Services restarted."
     fi
   fi
