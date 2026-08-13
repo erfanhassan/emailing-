@@ -4,7 +4,11 @@ set -e
 echo "=== Starting AI Outreach Dashboard (Local) ==="
 
 # Activate virtual environment
-source .venv/bin/activate
+if [ -d ".venv" ]; then
+  source .venv/bin/activate
+elif [ -d "venv" ]; then
+  source venv/bin/activate
+fi
 
 # Start the background worker (FastAPI + APScheduler) on port 8000
 echo "[1/2] Starting background worker on port 8000..."

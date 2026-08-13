@@ -6,7 +6,7 @@
 cd "$(dirname "$0")"
 
 STARTUP_CMD="./startup.sh"
-if [ -d ".venv" ]; then
+if [ -d ".venv" ] || [ -d "venv" ]; then
   STARTUP_CMD="./startup_local.sh"
 fi
 
