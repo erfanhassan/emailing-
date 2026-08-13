@@ -23,13 +23,13 @@ while true; do
     docker build -t outreach-app .
     docker stop outreach || true
     docker rm outreach || true
-    docker run -d --name outreach --restart always -p 8000:8000 -p 8501:8501 outreach-app
+    docker run -d --name outreach --restart always --env-file .env -p 8000:8000 -p 8501:8501 outreach-app
     echo "$(date): Docker container rebuilt and restarted."
   else
     # 2. Check if Docker container is running, if not restart/run it
     if ! docker ps | grep -q "outreach"; then
       echo "$(date): outreach container is down. Restarting..."
-      docker start outreach || (docker rm outreach || true; docker run -d --name outreach --restart always -p 8000:8000 -p 8501:8501 outreach-app)
+      docker start outreach || (docker rm outreach || true; docker run -d --name outreach --restart always --env-file .env -p 8000:8000 -p 8501:8501 outreach-app)
     fi
   fi
 
