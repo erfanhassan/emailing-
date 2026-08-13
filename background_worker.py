@@ -17,6 +17,31 @@ logger = logging.getLogger("background_worker")
 
 app = FastAPI(title="Email Outreach Worker")
 
+import random
+from gspread.exceptions import APIError
+
+def retry_gspread(func, *args, max_retries=5, initial_backoff=2, **kwargs):
+    backoff = initial_backoff
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            status_code = getattr(e, 'response', None) and getattr(e.response, 'status_code', None)
+            if status_code == 429 or "quota" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+        except Exception as e:
+            if "quota" in str(e).lower() or "429" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+    return func(*args, **kwargs)
+
 # Google Sheets Auth
 def get_gspread_client():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
@@ -60,12 +85,13 @@ def update_sheet_status_by_thread(thread_id: str, new_status: str):
         import re
         match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url)
         key = match.group(1) if match else sheet_url
-        sh = gc_local.open_by_key(key)
+        sh = retry_gspread(gc_local.open_by_key, key)
             
-        for ws in sh.worksheets():
+        for ws in retry_gspread(sh.worksheets):
             try:
-                all_values = ws.get_all_values()
-            except:
+                all_values = retry_gspread(ws.get_all_values)
+            except Exception as e:
+                logger.error(f"Failed to read worksheet values: {e}")
                 continue
                 
             if not all_values or len(all_values) < 2:
@@ -91,7 +117,7 @@ def update_sheet_status_by_thread(thread_id: str, new_status: str):
                     if current_status.lower() != "replied":
                         from gspread.utils import rowcol_to_a1
                         cell = rowcol_to_a1(i + 2, status_col + 1)
-                        ws.update_acell(cell, new_status)
+                        retry_gspread(ws.update_acell, cell, new_status)
                         logger.info(f"Updated thread {thread_id} to {new_status}")
                         return
     except Exception as e:
@@ -144,31 +170,34 @@ def job_drip_send():
         logger.info(f"Opening sheet with URL/ID: {sheet_url}")
         match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url)
         key = match.group(1) if match else sheet_url
-        sh = gc_local.open_by_key(key)
+        sh = retry_gspread(gc_local.open_by_key, key)
         logger.info(f"Successfully opened sheet: {sh.title}")
             
         def get_setting(sh, key, default):
             try:
-                ws = sh.worksheet("Settings")
-                cell = ws.find(key, in_column=1)
+                ws = retry_gspread(sh.worksheet, "Settings")
+                cell = retry_gspread(ws.find, key, in_column=1)
                 if cell:
-                    return ws.cell(cell.row, 2).value
+                    return retry_gspread(ws.cell, cell.row, 2).value
                 return default
             except:
                 return default
                 
         def set_setting(sh, key, value):
             try:
-                ws = sh.worksheet("Settings")
-                cell = ws.find(key, in_column=1)
+                ws = retry_gspread(sh.worksheet, "Settings")
+                cell = retry_gspread(ws.find, key, in_column=1)
                 if cell:
-                    ws.update_cell(cell.row, 2, str(value))
+                    retry_gspread(ws.update_cell, cell.row, 2, str(value))
                 else:
-                    ws.append_row([key, str(value)])
+                    retry_gspread(ws.append_row, [key, str(value)])
             except gspread.WorksheetNotFound:
-                ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
-                ws.append_row(["Key", "Value"])
-                ws.append_row([key, str(value)])
+                try:
+                    ws = retry_gspread(sh.add_worksheet, title="Settings", rows="50", cols="3")
+                    retry_gspread(ws.append_row, ["Key", "Value"])
+                    retry_gspread(ws.append_row, [key, str(value)])
+                except Exception as e:
+                    logger.error(f"Failed to create settings worksheet: {e}")
                 
         # Read independent provider delays (default to 600s = 10 mins if not set)
         provider_delays = {
@@ -184,9 +213,9 @@ def job_drip_send():
         # We will track which providers we have already sent an email for in this tick
         providers_sent_this_tick = set()
         
-        for ws in sh.worksheets():
+        for ws in retry_gspread(sh.worksheets):
             try:
-                all_values = ws.get_all_values()
+                all_values = retry_gspread(ws.get_all_values)
             except:
                 continue
                 
@@ -250,19 +279,19 @@ def job_drip_send():
                         from gspread.utils import rowcol_to_a1
                         if success:
                             msg_id = result
-                            ws.update_acell(rowcol_to_a1(row_idx, status_idx + 1), "Sent")
+                            retry_gspread(ws.update_acell, rowcol_to_a1(row_idx, status_idx + 1), "Sent")
                             if thread_idx != -1 and msg_id:
-                                ws.update_acell(rowcol_to_a1(row_idx, thread_idx + 1), msg_id)
+                                retry_gspread(ws.update_acell, rowcol_to_a1(row_idx, thread_idx + 1), msg_id)
                             if orig_body_idx != -1:
-                                ws.update_acell(rowcol_to_a1(row_idx, orig_body_idx + 1), body)
+                                retry_gspread(ws.update_acell, rowcol_to_a1(row_idx, orig_body_idx + 1), body)
                             if last_contacted_idx != -1:
-                                ws.update_acell(rowcol_to_a1(row_idx, last_contacted_idx + 1), datetime.now().strftime("%Y-%m-%d"))
+                                retry_gspread(ws.update_acell, rowcol_to_a1(row_idx, last_contacted_idx + 1), datetime.now().strftime("%Y-%m-%d"))
                             
                             providers_sent_this_tick.add(provider)
                             set_setting(sh, setting_key, time.time())
                         else:
                             error_msg = result
-                            ws.update_acell(rowcol_to_a1(row_idx, status_idx + 1), f"Failed: {error_msg}")
+                            retry_gspread(ws.update_acell, rowcol_to_a1(row_idx, status_idx + 1), f"Failed: {error_msg}")
                             # We don't update the timestamp so it can try another email for this provider next tick
                             
     except Exception as e:

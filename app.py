@@ -227,6 +227,31 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+import random
+from gspread.exceptions import APIError
+
+def retry_gspread(func, *args, max_retries=5, initial_backoff=2, **kwargs):
+    backoff = initial_backoff
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            status_code = getattr(e, 'response', None) and getattr(e.response, 'status_code', None)
+            if status_code == 429 or "quota" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+        except Exception as e:
+            if "quota" in str(e).lower() or "429" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+    return func(*args, **kwargs)
+
 def get_gspread_client():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if creds_json:
@@ -273,44 +298,72 @@ if not gc or not sheet_url_or_id:
 # Load the Google Sheet
 try:
     if "spreadsheets.google.com" in sheet_url_or_id:
-        sh = gc.open_by_url(sheet_url_or_id)
+        sh = retry_gspread(gc.open_by_url, sheet_url_or_id)
     else:
-        sh = gc.open_by_key(sheet_url_or_id)
+        sh = retry_gspread(gc.open_by_key, sheet_url_or_id)
 except Exception as e:
     st.error(f"Could not open Google Sheet: {e}")
     st.stop()
 
 # --- Load Settings from Sheet ---
-def load_settings_from_sheet(sh):
+@st.cache_data(ttl=30)
+def load_settings_dict_cached(sheet_url_or_id):
+    gc_local = get_gspread_client()
+    if not gc_local:
+        return {}
     try:
-        ws = sh.worksheet("Settings")
-        records = ws.get_all_records()
+        if "spreadsheets.google.com" in sheet_url_or_id:
+            sh_local = retry_gspread(gc_local.open_by_url, sheet_url_or_id)
+        else:
+            sh_local = retry_gspread(gc_local.open_by_key, sheet_url_or_id)
+        ws = retry_gspread(sh_local.worksheet, "Settings")
+        records = retry_gspread(ws.get_all_records)
+        settings = {}
         for record in records:
             key = record.get("Key")
             val = record.get("Value")
             if key:
-                os.environ[key] = str(val)
+                settings[key] = str(val)
+        return settings
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
-        ws.append_row(["Key", "Value"])
-load_settings_from_sheet(sh)
+        raise gspread.exceptions.WorksheetNotFound("Settings worksheet not found")
+    except Exception as e:
+        return {}
+
+def load_settings_from_sheet(sh, sheet_url_or_id):
+    try:
+        settings = load_settings_dict_cached(sheet_url_or_id)
+        for key, val in settings.items():
+            os.environ[key] = val
+    except gspread.exceptions.WorksheetNotFound:
+        try:
+            ws = retry_gspread(sh.add_worksheet, title="Settings", rows="50", cols="3")
+            retry_gspread(ws.append_row, ["Key", "Value"])
+        except Exception as e:
+            st.error(f"Failed to create Settings worksheet: {e}")
+load_settings_from_sheet(sh, sheet_url_or_id)
 
 def save_setting_to_sheet(sh, key, value):
     try:
-        ws = sh.worksheet("Settings")
-    except:
-        ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
-        ws.append_row(["Key", "Value"])
+        ws = retry_gspread(sh.worksheet, "Settings")
+    except Exception:
+        try:
+            ws = retry_gspread(sh.add_worksheet, title="Settings", rows="50", cols="3")
+            retry_gspread(ws.append_row, ["Key", "Value"])
+        except Exception as e:
+            st.error(f"Failed to create Settings worksheet: {e}")
+            return
         
     try:
-        cell = ws.find(key, in_column=1)
+        cell = retry_gspread(ws.find, key, in_column=1)
         if cell:
-            ws.update_cell(cell.row, 2, value)
+            retry_gspread(ws.update_cell, cell.row, 2, value)
         else:
-            ws.append_row([key, value])
+            retry_gspread(ws.append_row, [key, value])
     except Exception:
-        ws.append_row([key, value])
+        retry_gspread(ws.append_row, [key, value])
     os.environ[key] = str(value)
+    st.cache_data.clear()
 
 # --- Render Email Provider Settings ---
 st.sidebar.markdown("---")
@@ -363,15 +416,19 @@ if st.sidebar.button("💾 Save Email Settings"):
     st.rerun()
 
 # --- Campaigns Logic ---
-def load_campaigns_from_sheet(sh):
-    campaigns = {"Default": {
-        "sender_name": "", "tone": "Professional and concise", 
-        "value_proposition": "Saving time and reducing manual work through AI.", 
-        "extra_instructions": "Do not use vague automation terms."
-    }}
+# --- Campaigns Logic ---
+@st.cache_data(ttl=30)
+def load_campaigns_dict_cached(sheet_url_or_id):
+    gc_local = get_gspread_client()
+    if not gc_local:
+        return None
     try:
-        ws = sh.worksheet("Campaigns")
-        records = ws.get_all_records()
+        if "spreadsheets.google.com" in sheet_url_or_id:
+            sh_local = retry_gspread(gc_local.open_by_url, sheet_url_or_id)
+        else:
+            sh_local = retry_gspread(gc_local.open_by_key, sheet_url_or_id)
+        ws = retry_gspread(sh_local.worksheet, "Campaigns")
+        records = retry_gspread(ws.get_all_records)
         if records:
             loaded_campaigns = {}
             for row in records:
@@ -385,26 +442,53 @@ def load_campaigns_from_sheet(sh):
                     }
             if loaded_campaigns:
                 return loaded_campaigns
+        return None
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Campaigns", rows="100", cols="5")
-        ws.append_row(["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"])
-        ws.append_row(["Default", campaigns["Default"]["sender_name"], campaigns["Default"]["tone"], campaigns["Default"]["value_proposition"], campaigns["Default"]["extra_instructions"]])
+        raise gspread.exceptions.WorksheetNotFound("Campaigns worksheet not found")
+    except Exception as e:
+        return None
+
+def load_campaigns_from_sheet(sh, sheet_url_or_id):
+    campaigns = {"Default": {
+        "sender_name": "", "tone": "Professional and concise", 
+        "value_proposition": "Saving time and reducing manual work through AI.", 
+        "extra_instructions": "Do not use vague automation terms."
+    }}
+    try:
+        loaded = load_campaigns_dict_cached(sheet_url_or_id)
+        if loaded:
+            return loaded
+    except gspread.exceptions.WorksheetNotFound:
+        try:
+            ws = retry_gspread(sh.add_worksheet, title="Campaigns", rows="100", cols="5")
+            retry_gspread(ws.append_row, ["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"])
+            retry_gspread(ws.append_row, ["Default", campaigns["Default"]["sender_name"], campaigns["Default"]["tone"], campaigns["Default"]["value_proposition"], campaigns["Default"]["extra_instructions"]])
+        except Exception as e:
+            st.error(f"Failed to create Campaigns worksheet: {e}")
     return campaigns
 
 def save_all_campaigns_to_sheet(sh, campaigns_dict):
     try:
-        ws = sh.worksheet("Campaigns")
+        ws = retry_gspread(sh.worksheet, "Campaigns")
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Campaigns", rows="100", cols="5")
+        try:
+            ws = retry_gspread(sh.add_worksheet, title="Campaigns", rows="100", cols="5")
+        except Exception as e:
+            st.error(f"Failed to create Campaigns worksheet during save: {e}")
+            return
     
-    ws.clear()
-    rows = [["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"]]
-    for name, data in campaigns_dict.items():
-        rows.append([name, data.get("sender_name", ""), data.get("tone", ""), data.get("value_proposition", ""), data.get("extra_instructions", "")])
-    ws.append_rows(rows)
+    try:
+        retry_gspread(ws.clear)
+        rows = [["Campaign Name", "Sender Name", "Tone", "Value Proposition", "Extra Instructions"]]
+        for name, data in campaigns_dict.items():
+            rows.append([name, data.get("sender_name", ""), data.get("tone", ""), data.get("value_proposition", ""), data.get("extra_instructions", "")])
+        retry_gspread(ws.append_rows, rows)
+    except Exception as e:
+        st.error(f"Failed to save campaigns: {e}")
+    st.cache_data.clear()
 
 # Load global campaigns variable so it can be passed to draft_email_with_deepseek
-global_campaigns = load_campaigns_from_sheet(sh)
+global_campaigns = load_campaigns_from_sheet(sh, sheet_url_or_id)
 
 def render_campaigns():
     st.markdown("Create multiple AI campaigns. The AI will randomly select one to test which messaging performs better.")
@@ -444,9 +528,9 @@ def render_campaigns():
 def get_sheet_last_update_time(sheet_url_or_id):
     try:
         if "spreadsheets.google.com" in sheet_url_or_id:
-            sh = gc.open_by_url(sheet_url_or_id)
+            sh = retry_gspread(gc.open_by_url, sheet_url_or_id)
         else:
-            sh = gc.open_by_key(sheet_url_or_id)
+            sh = retry_gspread(gc.open_by_key, sheet_url_or_id)
         return getattr(sh, 'lastUpdateTime', str(time.time()))
     except Exception as e:
         return str(time.time())
@@ -455,12 +539,12 @@ def get_sheet_last_update_time(sheet_url_or_id):
 def fetch_leads(sheet_name, last_update_time):
     try:
         if "spreadsheets.google.com" in sheet_url_or_id:
-            sh = gc.open_by_url(sheet_url_or_id)
+            sh = retry_gspread(gc.open_by_url, sheet_url_or_id)
         else:
-            sh = gc.open_by_key(sheet_url_or_id)
+            sh = retry_gspread(gc.open_by_key, sheet_url_or_id)
             
-        worksheet = sh.worksheet(sheet_name)
-        all_values = worksheet.get_all_values()
+        worksheet = retry_gspread(sh.worksheet, sheet_name)
+        all_values = retry_gspread(worksheet.get_all_values)
         return all_values
     except Exception as e:
         st.error(f"Error accessing Google Sheet: {e}")
@@ -479,19 +563,10 @@ if "delay_value" not in st.session_state:
 if "delay_unit" not in st.session_state:
     st.session_state.delay_unit = os.environ.get("DELAY_UNIT", "Seconds")
 
-try:
-    if "spreadsheets.google.com" in sheet_url_or_id:
-        sh = gc.open_by_url(sheet_url_or_id)
-    else:
-        sh = gc.open_by_key(sheet_url_or_id)
-except Exception as e:
-    st.error(f"❌ Could not find the Google Sheet. Please check the URL and ensure you have shared it with the service account email. Error: {e}")
-    st.stop()
-
 st.sidebar.markdown("---")
-all_sheets = [ws.title for ws in sh.worksheets()]
+all_sheets = [ws.title for ws in retry_gspread(sh.worksheets)]
 selected_sheet = st.sidebar.selectbox("📂 Select Worksheet", all_sheets)
-worksheet = sh.worksheet(selected_sheet)
+worksheet = retry_gspread(sh.worksheet, selected_sheet)
 
 last_update_time = get_sheet_last_update_time(sheet_url_or_id)
 all_values = fetch_leads(selected_sheet, last_update_time)

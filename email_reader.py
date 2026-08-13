@@ -42,6 +42,32 @@ def connect_imap() -> imaplib.IMAP4_SSL:
         return None
 
 
+import random
+from gspread.exceptions import APIError
+
+def retry_gspread(func, *args, max_retries=5, initial_backoff=2, **kwargs):
+    backoff = initial_backoff
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            status_code = getattr(e, 'response', None) and getattr(e.response, 'status_code', None)
+            if status_code == 429 or "quota" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+        except Exception as e:
+            if "quota" in str(e).lower() or "429" in str(e).lower() or "limit" in str(e).lower():
+                sleep_time = backoff + random.uniform(0, 1)
+                time.sleep(sleep_time)
+                backoff *= 2
+                continue
+            raise e
+    return func(*args, **kwargs)
+
+
 def check_for_replies(gc: gspread.Client, sheet_url_or_id: str, max_emails: int = 50):
     """
     Scans the INBOX for replies and updates the Google Sheet.
@@ -61,17 +87,18 @@ def check_for_replies(gc: gspread.Client, sheet_url_or_id: str, max_emails: int 
             import re
             match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url_or_id)
             key = match.group(1) if match else sheet_url_or_id
-            sh = gc.open_by_key(key)
+            sh = retry_gspread(gc.open_by_key, key)
         except Exception as e:
             logger.error(f"Failed to open spreadsheet: {e}")
             return
             
         # Iterate over all worksheets
-        worksheets = sh.worksheets()
+        worksheets = retry_gspread(sh.worksheets)
         for ws in worksheets:
             try:
-                all_values = ws.get_all_values()
-            except Exception:
+                all_values = retry_gspread(ws.get_all_values)
+            except Exception as e:
+                logger.error(f"Failed to read worksheet values: {e}")
                 continue
                 
             if not all_values or len(all_values) < 2:
@@ -142,7 +169,7 @@ def check_for_replies(gc: gspread.Client, sheet_url_or_id: str, max_emails: int 
                             try:
                                 from gspread.utils import rowcol_to_a1
                                 cell = rowcol_to_a1(row_idx, status_col + 1)
-                                ws.update_acell(cell, "Replied")
+                                retry_gspread(ws.update_acell, cell, "Replied")
                                 logger.info(f"Updated row {row_idx} in {ws.title} to Replied based on IMAP match.")
                                 # Remove from dict so we don't update multiple times if there are multiple replies
                                 del thread_to_row[matched_thread]
