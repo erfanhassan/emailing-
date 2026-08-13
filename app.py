@@ -304,8 +304,11 @@ def save_setting_to_sheet(sh, key, value):
         
     try:
         cell = ws.find(key, in_column=1)
-        ws.update_cell(cell.row, 2, value)
-    except gspread.exceptions.CellNotFound:
+        if cell:
+            ws.update_cell(cell.row, 2, value)
+        else:
+            ws.append_row([key, value])
+    except Exception:
         ws.append_row([key, value])
     os.environ[key] = str(value)
 
@@ -530,6 +533,7 @@ last_contacted_idx = find_col(['last contacted date', 'last contacted', 'contact
 orig_body_idx = find_col(['original email body'])
 thread_idx = find_col(['thread id'])
 campaign_idx = find_col(['campaign'])
+provider_idx = find_col(['provider', 'email provider', 'sender provider'])
 
 # Auto-add missing columns to make it schema-agnostic
 missing_cols = []
@@ -541,6 +545,7 @@ if campaign_idx == -1: missing_cols.append("Campaign")
 if last_contacted_idx == -1: missing_cols.append("Last Contacted Date")
 if orig_body_idx == -1: missing_cols.append("Original Email Body")
 if thread_idx == -1: missing_cols.append("Thread ID")
+if provider_idx == -1: missing_cols.append("Provider")
 
 if missing_cols:
     with st.spinner(f"Configuring your sheet dynamically. Adding missing columns: {', '.join(missing_cols)}..."):
@@ -789,57 +794,103 @@ st.sidebar.markdown("---")
 
 # Quick Actions and Control Settings
 def render_command_center():
-    st.markdown("### ⚡ Outreach Command Center")
+    st.markdown("### ⚡ Unified Outreach Command Center")
+    st.write("Configure and trigger concurrent sending across all your email providers.")
+    
     with st.container(border=True):
-        col_act, col_cfg = st.columns([2, 1])
-        with col_act:
-            st.markdown("**Run Outreach Jobs**")
-            st.write("Trigger automated batch processing for email drafting and sending.")
-            btn_col1, btn_col2, btn_col3 = st.columns(3)
-            with btn_col1:
-                if st.button("🔍 Fetch & Draft New Leads", use_container_width=True, type="primary", help="Scrape websites, extract emails, and draft cold pitches for 'New' leads"):
-                    with st.spinner("Analyzing websites, finding emails, and drafting pitches..."):
-                        updates_made = run_drafting_job(st.session_state.draft_limit)
-                        if updates_made > 0:
-                            st.success(f"Drafted {updates_made} new leads.")
-                            clear_cache()
-                            st.rerun()
-                        else:
-                            st.info("No 'New' leads with valid websites found.")
-            with btn_col2:
-                if st.button("➕ Draft Follow-Ups (3-Day)", use_container_width=True, help="Scan previously contacted leads (3+ days ago) and draft custom follow-up emails"):
-                    with st.spinner("Scanning for leads contacted 3+ days ago and drafting follow-ups..."):
-                        updates_made = run_followup_job(st.session_state.draft_limit)
-                        if updates_made > 0:
-                            st.success(f"Drafted {updates_made} follow-up emails.")
-                            clear_cache()
-                            st.rerun()
-                        else:
-                            st.info("No leads currently qualify for a follow-up.")
-            with btn_col3:
-                if st.button("🚀 Send Approved Queue", use_container_width=True, type="primary", help="Send all 'Approved' emails via SMTP"):
-                    st.success("The queue is active! Approved emails will be sent automatically by the background worker based on your configured delay.")
-                        
-        with col_cfg:
-            st.markdown("**Outreach Parameters**")
-            st.number_input("Max Drafts per Run", min_value=1, max_value=500, key="draft_limit")
-            st.number_input("Max Emails to Send", min_value=1, max_value=500, key="daily_limit")
-            
-            def update_delay_settings():
-                unit_multiplier = {"Seconds": 1, "Minutes": 60, "Hours": 3600, "Days": 86400}
-                total_delay_sec = st.session_state.delay_value * unit_multiplier[st.session_state.delay_unit]
-                try:
-                    save_setting_to_sheet(sh, "SEND_DELAY_SEC", total_delay_sec)
-                    save_setting_to_sheet(sh, "DELAY_VALUE", st.session_state.delay_value)
-                    save_setting_to_sheet(sh, "DELAY_UNIT", st.session_state.delay_unit)
-                except:
-                    pass
+        st.markdown("**1. Configure Drafting & Follow-Ups**")
+        st.number_input("Max Drafts per Run", min_value=1, max_value=500, key="draft_limit", value=10)
+        
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("🔍 Fetch & Draft New Leads", use_container_width=True, type="primary"):
+                with st.spinner("Analyzing websites, finding emails, and drafting pitches..."):
+                    updates = run_drafting_job(st.session_state.draft_limit)
+                    if updates > 0:
+                        st.success(f"Drafted {updates} new leads.")
+                        clear_cache()
+                        st.rerun()
+                    else:
+                        st.info("No 'New' leads with valid websites found.")
+        with btn_col2:
+            if st.button("➕ Draft Follow-Ups (3-Day)", use_container_width=True):
+                with st.spinner("Scanning for leads contacted 3+ days ago..."):
+                    updates = run_followup_job(st.session_state.draft_limit)
+                    if updates > 0:
+                        st.success(f"Drafted {updates} follow-up emails.")
+                        clear_cache()
+                        st.rerun()
+                    else:
+                        st.info("No leads currently qualify for a follow-up.")
 
-            delay_col1, delay_col2 = st.columns(2)
-            with delay_col1:
-                st.number_input("Delay Value", min_value=1, key="delay_value", on_change=update_delay_settings)
-            with delay_col2:
-                st.selectbox("Delay Unit", options=["Seconds", "Minutes", "Hours", "Days"], key="delay_unit", on_change=update_delay_settings)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    with st.container(border=True):
+        st.markdown("**2. Unified Sending configuration**")
+        st.write("Set limits and delays independently. Background workers will process them concurrently.")
+        
+        col_g, col_z, col_h = st.columns(3)
+        
+        with col_g:
+            st.markdown("#### 🔴 Gmail")
+            g_en = st.checkbox("Enable Gmail", value=True, key="en_gmail")
+            g_limit = st.number_input("Emails to Send", min_value=1, max_value=200, value=10, key="limit_gmail", disabled=not g_en)
+            g_delay = st.number_input("Delay (mins)", min_value=1, max_value=1440, value=10, key="delay_gmail", disabled=not g_en)
+            
+        with col_z:
+            st.markdown("#### 🔵 Zoho")
+            z_en = st.checkbox("Enable Zoho", value=True, key="en_zoho")
+            z_limit = st.number_input("Emails to Send", min_value=1, max_value=200, value=15, key="limit_zoho", disabled=not z_en)
+            z_delay = st.number_input("Delay (mins)", min_value=1, max_value=1440, value=5, key="delay_zoho", disabled=not z_en)
+            
+        with col_h:
+            st.markdown("#### 🟣 Hostinger")
+            h_en = st.checkbox("Enable Hostinger", value=True, key="en_host")
+            h_limit = st.number_input("Emails to Send", min_value=1, max_value=200, value=5, key="limit_host", disabled=not h_en)
+            h_delay = st.number_input("Delay (mins)", min_value=1, max_value=1440, value=15, key="delay_host", disabled=not h_en)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        if st.button("🚀 START UNIFIED SENDING", use_container_width=True, type="primary"):
+            # Update background settings in Sheet for workers to read delays
+            if g_en: save_setting_to_sheet(sh, "DELAY_Gmail", g_delay * 60)
+            if z_en: save_setting_to_sheet(sh, "DELAY_Zoho", z_delay * 60)
+            if h_en: save_setting_to_sheet(sh, "DELAY_Hostinger", h_delay * 60)
+            
+            # Allocate "Approved" leads to the enabled queues
+            allocations = {"Gmail": g_limit if g_en else 0, "Zoho": z_limit if z_en else 0, "Hostinger": h_limit if h_en else 0}
+            
+            queued_counts = {"Gmail": 0, "Zoho": 0, "Hostinger": 0}
+            current_provider = "Gmail"
+            
+            providers = ["Gmail", "Zoho", "Hostinger"]
+            provider_idx = 0
+            
+            updates = []
+            for lead in approved_list:
+                # Find next provider with remaining allocation
+                assigned = False
+                for _ in range(3):
+                    p = providers[provider_idx]
+                    if queued_counts[p] < allocations[p]:
+                        row_idx = lead['_row_idx']
+                        status_cell = rowcol_to_a1(row_idx, status_idx + 1)
+                        worksheet.update_acell(status_cell, f"Queued - {p}")
+                        queued_counts[p] += 1
+                        assigned = True
+                        # Round-robin
+                        provider_idx = (provider_idx + 1) % 3
+                        break
+                    provider_idx = (provider_idx + 1) % 3
+                
+                if not assigned:
+                    break # All allocations fulfilled
+            
+            st.success(f"Queued successfully! Gmail: {queued_counts['Gmail']}, Zoho: {queued_counts['Zoho']}, Hostinger: {queued_counts['Hostinger']}")
+            st.info("The background worker will now automatically send these in the background based on your delays.")
+            clear_cache()
+            time.sleep(2)
+            st.rerun()
 
 from urllib.parse import urlparse
 
@@ -953,7 +1004,7 @@ def render_geo_sourcing():
                             
                         phone = b.get("phone", "")
                         
-                        if found_emails or phone:
+                        if found_emails:
                             new_row = [""] * len(clean_headers)
                             new_row[0] = b.get("name", "")
                             new_row[1] = b.get("address") or sub_loc
@@ -1389,49 +1440,7 @@ def render_tables():
             with bulk_send_col1:
                 st.checkbox("Select All Approved", key="select_all_send", on_change=toggle_all_send)
             with bulk_send_col2:
-                if st.button("🚀 Bulk Send Selected", type="primary"):
-                    selected_send_leads = [lead for lead in approved_leads if st.session_state.get(f"sel_send_{lead['_row_idx']}")]
-                    if not selected_send_leads:
-                        st.warning("No leads selected for bulk sending.")
-                    else:
-                        with st.spinner(f"Sending {len(selected_send_leads)} emails..."):
-                            sent_count = 0
-                            update_data = []
-                            for lead in selected_send_leads:
-                                row_idx = lead['_row_idx']
-                                to_email = lead[headers[email_idx]]
-                                subject = lead[headers[subject_idx]]
-                                body = lead[headers[body_idx]]
-                        
-                                if to_email and subject and body:
-                                    thread_id = lead.get(headers[thread_idx], "") if thread_idx != -1 else ""
-                                    success, msg_id = send_email(to_email, subject, body, thread_id=thread_id)
-                                    if success:
-                                        status_cell = rowcol_to_a1(row_idx, status_idx + 1)
-                                        update_data.append({'range': status_cell, 'values': [["Sent"]]})
-                                        if thread_idx != -1 and msg_id:
-                                            update_data.append({'range': rowcol_to_a1(row_idx, thread_idx + 1), 'values': [[msg_id]]})
-                                        if orig_body_idx != -1:
-                                            update_data.append({'range': rowcol_to_a1(row_idx, orig_body_idx + 1), 'values': [[body]]})
-                                        if last_contacted_idx != -1:
-                                            update_data.append({'range': rowcol_to_a1(row_idx, last_contacted_idx + 1), 'values': [[datetime.now().strftime("%Y-%m-%d")]]})
-                                        sent_count += 1
-                                        unit_multiplier = {"Seconds": 1, "Minutes": 60, "Hours": 3600, "Days": 86400}
-                                        total_delay_sec = st.session_state.delay_value * unit_multiplier[st.session_state.delay_unit]
-                                        time.sleep(total_delay_sec)
-                                    else:
-                                        st.error(f"Failed to send email to {to_email}")
-                    
-                            if update_data:
-                                try:
-                                    worksheet.batch_update(update_data)
-                                except Exception as e:
-                                    st.error(f"Error updating sheet: {e}")
-                            
-                            st.success(f"Successfully sent {sent_count} emails!")
-                            clear_cache()
-                            time.sleep(1)
-                            st.rerun()
+                st.info("💡 To send these emails, go to the **Unified Outreach Command Center** above.")
 
             for lead in approved_leads:
                 row_idx = lead['_row_idx']

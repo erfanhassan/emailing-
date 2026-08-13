@@ -19,8 +19,24 @@ app = FastAPI(title="Email Outreach Worker")
 
 # Google Sheets Auth
 def get_gspread_client():
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        try:
+            import json
+            from google.oauth2.service_account import Credentials
+            creds_dict = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ])
+            return gspread.authorize(creds)
+        except Exception as e:
+            logger.error(f"Failed to load credentials from GOOGLE_CREDENTIALS_JSON: {e}")
+            return None
+
     creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if not creds_file or not os.path.exists(creds_file):
+        logger.error("GOOGLE_APPLICATION_CREDENTIALS not found!")
         return None
     try:
         return gspread.service_account(filename=creds_file)
@@ -36,13 +52,15 @@ TRANSPARENT_PIXEL = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00
 
 def update_sheet_status_by_thread(thread_id: str, new_status: str):
     """Finds the row with the given thread_id and updates its status."""
-    if not gc or not sheet_url_or_id:
+    gc_local = get_gspread_client()
+    sheet_url = os.environ.get("GOOGLE_SHEET_URL_OR_ID", "")
+    if not gc_local or not sheet_url:
         return
     try:
-        if "spreadsheets.google.com" in sheet_url_or_id:
-            sh = gc.open_by_url(sheet_url_or_id)
-        else:
-            sh = gc.open_by_key(sheet_url_or_id)
+        import re
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url)
+        key = match.group(1) if match else sheet_url
+        sh = gc_local.open_by_key(key)
             
         for ws in sh.worksheets():
             try:
@@ -105,26 +123,37 @@ def track_click(url: str, msg_id: str = ""):
 
 def job_check_replies():
     logger.info("Running scheduled IMAP reply check...")
-    if gc and sheet_url_or_id:
-        email_reader.check_for_replies(gc, sheet_url_or_id)
+    gc_local = get_gspread_client()
+    sheet_url = os.environ.get("GOOGLE_SHEET_URL_OR_ID", "")
+    if gc_local and sheet_url:
+        email_reader.check_for_replies(gc_local, sheet_url)
 
 def job_drip_send():
     """Sends a small batch of approved emails."""
     logger.info("Running scheduled Drip Send job...")
-    if not gc or not sheet_url_or_id:
+    
+    gc_local = get_gspread_client()
+    sheet_url = os.environ.get("GOOGLE_SHEET_URL_OR_ID", "")
+    
+    if not gc_local or not sheet_url:
+        logger.error(f"Missing gc ({bool(gc_local)}) or sheet_url_or_id ({sheet_url})")
         return
         
     try:
-        if "spreadsheets.google.com" in sheet_url_or_id:
-            sh = gc.open_by_url(sheet_url_or_id)
-        else:
-            sh = gc.open_by_key(sheet_url_or_id)
+        import re
+        logger.info(f"Opening sheet with URL/ID: {sheet_url}")
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url)
+        key = match.group(1) if match else sheet_url
+        sh = gc_local.open_by_key(key)
+        logger.info(f"Successfully opened sheet: {sh.title}")
             
         def get_setting(sh, key, default):
             try:
                 ws = sh.worksheet("Settings")
                 cell = ws.find(key, in_column=1)
-                return ws.cell(cell.row, 2).value
+                if cell:
+                    return ws.cell(cell.row, 2).value
+                return default
             except:
                 return default
                 
@@ -132,33 +161,30 @@ def job_drip_send():
             try:
                 ws = sh.worksheet("Settings")
                 cell = ws.find(key, in_column=1)
-                ws.update_cell(cell.row, 2, str(value))
-            except gspread.exceptions.CellNotFound:
-                ws.append_row([key, str(value)])
-            except gspread.exceptions.WorksheetNotFound:
+                if cell:
+                    ws.update_cell(cell.row, 2, str(value))
+                else:
+                    ws.append_row([key, str(value)])
+            except gspread.WorksheetNotFound:
                 ws = sh.add_worksheet(title="Settings", rows="50", cols="3")
                 ws.append_row(["Key", "Value"])
                 ws.append_row([key, str(value)])
                 
-        # Determine if it's time to send based on delay
-        send_delay_sec = int(get_setting(sh, "SEND_DELAY_SEC", 15))
-        last_sent_timestamp = float(get_setting(sh, "LAST_SENT_TIMESTAMP", 0))
-        current_time = time.time()
+        # Read independent provider delays (default to 600s = 10 mins if not set)
+        provider_delays = {
+            "Gmail": int(get_setting(sh, "DELAY_Gmail", 600)),
+            "Zoho": int(get_setting(sh, "DELAY_Zoho", 600)),
+            "Hostinger": int(get_setting(sh, "DELAY_Hostinger", 600)),
+        }
         
-        if current_time - last_sent_timestamp < send_delay_sec:
-            logger.info(f"Delay period hasn't passed yet. Skipping this cycle. (Waited {int(current_time - last_sent_timestamp)}s / {send_delay_sec}s)")
-            return
-
-        # Send max 1 email per run to strictly respect delay
-        max_to_send = 1
-        sent_count = 0
+        current_time = time.time()
         
         from datetime import datetime
         
+        # We will track which providers we have already sent an email for in this tick
+        providers_sent_this_tick = set()
+        
         for ws in sh.worksheets():
-            if sent_count >= max_to_send:
-                break
-                
             try:
                 all_values = ws.get_all_values()
             except:
@@ -189,15 +215,28 @@ def job_drip_send():
                 continue
                 
             for i, row in enumerate(all_values[1:]):
-                if sent_count >= max_to_send:
-                    break
-                    
                 row_idx = i + 2
                 while len(row) < len(headers):
                     row.append("")
                     
-                status = row[status_idx]
-                if status.strip().lower() == "approved":
+                status = row[status_idx].strip()
+                if status.startswith("Queued - "):
+                    provider = status.split("Queued - ")[1].strip()
+                    
+                    if provider not in provider_delays:
+                        provider = "Hostinger"
+                        
+                    # Check if this provider has already sent an email in this run (max 1 per run per provider)
+                    if provider in providers_sent_this_tick:
+                        continue
+                        
+                    setting_key = f"LAST_SENT_{provider.upper().replace(' ', '_')}"
+                    last_sent_timestamp = float(get_setting(sh, setting_key, 0))
+                    
+                    send_delay_sec = provider_delays.get(provider, 600)
+                    if current_time - last_sent_timestamp < send_delay_sec:
+                        continue # Skip this lead, provider is in cooldown
+                        
                     to_email = row[email_idx]
                     subject = row[subject_idx]
                     body = row[body_idx]
@@ -206,10 +245,11 @@ def job_drip_send():
                     if to_email and subject and body:
                         # tracking_url setup will be handled in email_sender if we pass it, 
                         # but we can also just let email_sender pull it from env.
-                        success, msg_id = send_email(to_email, subject, body, thread_id=thread_id)
+                        success, result = send_email(to_email, subject, body, thread_id=thread_id, provider=provider)
                         
                         from gspread.utils import rowcol_to_a1
                         if success:
+                            msg_id = result
                             ws.update_acell(rowcol_to_a1(row_idx, status_idx + 1), "Sent")
                             if thread_idx != -1 and msg_id:
                                 ws.update_acell(rowcol_to_a1(row_idx, thread_idx + 1), msg_id)
@@ -218,8 +258,12 @@ def job_drip_send():
                             if last_contacted_idx != -1:
                                 ws.update_acell(rowcol_to_a1(row_idx, last_contacted_idx + 1), datetime.now().strftime("%Y-%m-%d"))
                             
-                            sent_count += 1
-                            set_setting(sh, "LAST_SENT_TIMESTAMP", time.time())
+                            providers_sent_this_tick.add(provider)
+                            set_setting(sh, setting_key, time.time())
+                        else:
+                            error_msg = result
+                            ws.update_acell(rowcol_to_a1(row_idx, status_idx + 1), f"Failed: {error_msg}")
+                            # We don't update the timestamp so it can try another email for this provider next tick
                             
     except Exception as e:
         logger.error(f"Error in drip send job: {e}")

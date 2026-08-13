@@ -18,13 +18,28 @@ def send_email(to_email: str, subject: str, body: str, thread_id: str = None, pr
         return False, ""
 
     provider = provider or os.environ.get("SMTP_PROVIDER", "Hostinger")
-    sender_email = sender_email or os.environ.get("SMTP_EMAIL", os.environ.get("HOSTINGER_EMAIL"))
-    sender_password = sender_password or os.environ.get("SMTP_PASSWORD", os.environ.get("HOSTINGER_PASSWORD"))
+    
+    if not sender_email or not sender_password:
+        if provider == "Gmail":
+            sender_email = os.environ.get("GMAIL_EMAIL")
+            sender_password = os.environ.get("GMAIL_PASSWORD")
+        elif provider == "Zoho Mail":
+            sender_email = os.environ.get("ZOHO_EMAIL")
+            sender_password = os.environ.get("ZOHO_PASSWORD")
+        else: # Hostinger
+            sender_email = os.environ.get("HOSTINGER_EMAIL")
+            sender_password = os.environ.get("HOSTINGER_PASSWORD")
+            
+        # Fallback to general SMTP settings if specific ones are missing
+        sender_email = sender_email or os.environ.get("SMTP_EMAIL")
+        sender_password = sender_password or os.environ.get("SMTP_PASSWORD")
 
     if not sender_email or not sender_password:
-        logger.error("Email credentials not found.")
-        return False, ""
+        logger.error(f"Email credentials not found for provider: {provider}")
+        return False, f"Missing credentials for {provider}"
         
+    logger.info(f"Sending email to {to_email} using provider: {provider} (Sender: {sender_email})")
+    
     if provider == "Gmail":
         smtp_server = "smtp.gmail.com"
         smtp_port = 465
@@ -105,8 +120,10 @@ def send_email(to_email: str, subject: str, body: str, thread_id: str = None, pr
             
         return True, message_id
     except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication Error for {sender_email}: {e}")
-        return False, ""
+        error_msg = f"Auth Error for {sender_email}: {e}"
+        logger.error(error_msg)
+        return False, error_msg
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
-        return False, ""
+        error_msg = f"Error sending to {to_email}: {e}"
+        logger.error(error_msg)
+        return False, error_msg

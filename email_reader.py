@@ -56,11 +56,15 @@ def check_for_replies(gc: gspread.Client, sheet_url_or_id: str, max_emails: int 
         return
         
     try:
-        # Open Google Sheet
-        if "spreadsheets.google.com" in sheet_url_or_id:
-            sh = gc.open_by_url(sheet_url_or_id)
-        else:
-            sh = gc.open_by_key(sheet_url_or_id)
+        # Open Google
+        try:
+            import re
+            match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url_or_id)
+            key = match.group(1) if match else sheet_url_or_id
+            sh = gc.open_by_key(key)
+        except Exception as e:
+            logger.error(f"Failed to open spreadsheet: {e}")
+            return
             
         # Iterate over all worksheets
         worksheets = sh.worksheets()

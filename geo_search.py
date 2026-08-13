@@ -5,6 +5,7 @@ import logging
 from openai import OpenAI
 import json
 import time
+from scraper import find_social_media_contact
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,14 @@ def discover_businesses(location: str, industry: str) -> list[dict]:
                 phone = place.get("nationalPhoneNumber", "")
                 address = place.get("formattedAddress", "")
                 
-                if name and (website or phone):
+                if name and not website:
+                    social_url, social_emails, social_phone = find_social_media_contact(name, location)
+                    if social_emails:
+                        website = social_url
+                        if not phone and social_phone:
+                            phone = social_phone
+                
+                if name and website:
                     results.append({
                         "name": name,
                         "website": website,
